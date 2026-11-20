@@ -9,8 +9,8 @@ export function FeedbackBody({ outcome, testId = 'feedback-body' }: { outcome: O
   const notes = outcome.notes ?? []
   return (
     <div data-testid={testId}>
-      <p className={`text-xl font-black ${good ? 'text-green-800' : 'text-red-800'}`}>{good ? t('lesson.correct') : t('lesson.wrong')}</p>
-      {!good && <p className="font-bold text-red-900" data-testid="try-again">{t('lesson.tryAgain')}</p>}
+      {(good || !outcome.quiet) && <p className={`text-xl font-black ${good ? 'text-green-800' : 'text-red-800'}`}>{good ? t('lesson.correct') : t('lesson.wrong')}</p>}
+      {!good && !outcome.quiet && <p className="font-bold text-red-900" data-testid="try-again">{t('lesson.tryAgain')}</p>}
       {outcome.personNote && !good && (
         <p className="font-bold text-amber-900" data-testid="person-note">
           {t('note.conj', { p: PERSONS[outcome.personNote.person] ?? '', e: outcome.personNote.expected, g: outcome.personNote.given })}

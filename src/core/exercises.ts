@@ -805,6 +805,8 @@ export interface Outcome {
   note?: 'diacritics' | 'typo'
   /** German notes (spelling, article …) */
   notes?: DeNote[]
+  /** match pairs: no "Nu chiar… / Încearcă din nou!" message (the learner already saw each mistake) */
+  quiet?: boolean
   /** per-sub-skill results; default = [{meaning, correct}] */
   credits?: Credit[]
   /** what the learner answered (test history) */
@@ -896,7 +898,7 @@ export function evaluateSentence(ex: SentenceExercise, built: string[]): Outcome
 
 export function evaluateMatch(ex: MatchExercise, targetMistakes: number): Outcome {
   const t = ex.pairs.find((p) => p.wordId === ex.wordId)
-  return { correct: targetMistakes === 0, expected: t ? `${t.left} = ${t.right}` : '' }
+  return { correct: targetMistakes === 0, expected: t ? `${t.left} = ${t.right}` : '', quiet: true }
 }
 
 /** Verb forms: every field must match (typo/umlaut rules apply). */

@@ -286,3 +286,12 @@ describe('lesson runtime', () => {
     expect(countDue([a], NOW + 2 * DAY_MS)).toBe(1)
   })
 })
+
+describe('match pairs feedback', () => {
+  it('is quiet: no "Nu chiar… / Încearcă din nou!" after a match exercise', async () => {
+    const { evaluateMatch } = await import('../src/core/exercises')
+    const ex = { id: 'm', wordId: 'a', type: 'match' as const, pairs: [{ wordId: 'a', left: 'Wo?', right: 'Unde?' }] }
+    expect(evaluateMatch(ex, 1).quiet).toBe(true)
+    expect(evaluateMatch(ex, 0).correct).toBe(true)
+  })
+})

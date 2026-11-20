@@ -126,11 +126,21 @@ export function DropdownView({ ex, locked, outcome, onReady }: ExerciseProps<Cho
   )
 }
 
+function PairNo({ n }: { n: number | undefined }) {
+  if (!n) return null
+  return (
+    <span aria-label={`perechea ${n}`} className="absolute left-1.5 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-green-800 text-[11px] font-black leading-none text-white">{n}</span>
+  )
+}
+
 export function MatchView({ ex, locked, onSubmit, say }: ExerciseProps<MatchExercise>) {
   const rights = useMemo(() => shuffle(ex.pairs.map((p) => ({ id: p.wordId, text: p.right }))), [ex])
   const [left, setLeft] = useState<string | null>(null)
   const [done, setDone] = useState<Set<string>>(new Set())
   const [doneRight, setDoneRight] = useState<Set<string>>(new Set())
+  // small number shown on both halves of a matched pair
+  const [leftNo, setLeftNo] = useState<Record<string, number>>({})
+  const [rightNo, setRightNo] = useState<Record<string, number>>({})
   const [flash, setFlash] = useState<string | null>(null)
   const targetMistakes = useRef(0)
   const submitted = useRef(false)
@@ -152,6 +162,8 @@ export function MatchView({ ex, locked, onSubmit, say }: ExerciseProps<MatchExer
       const next = new Set(done).add(left)
       setDone(next)
       setDoneRight(new Set(doneRight).add(id))
+      setLeftNo({ ...leftNo, [left]: next.size })
+      setRightNo({ ...rightNo, [id]: next.size })
       setLeft(null)
       if (next.size === ex.pairs.length && !submitted.current) {
         submitted.current = true
@@ -173,7 +185,8 @@ export function MatchView({ ex, locked, onSubmit, say }: ExerciseProps<MatchExer
         <div className="grid gap-3">
           {ex.pairs.map((p) => (
             <button key={p.wordId} type="button" disabled={done.has(p.wordId) || locked} onClick={() => pickLeft(p.wordId)} data-selected={left === p.wordId}
-              data-state={done.has(p.wordId) ? 'right' : undefined} className={`choice !px-3 !py-3 text-center ${size}`}>
+              data-state={done.has(p.wordId) ? 'right' : undefined} className={`choice relative !px-3 !py-3 text-center ${size}`}>
+              <PairNo n={leftNo[p.wordId]} />
               <Term text={p.left} />
             </button>
           ))}
@@ -182,7 +195,8 @@ export function MatchView({ ex, locked, onSubmit, say }: ExerciseProps<MatchExer
           {rights.map((r) => (
             <motion.button key={r.id} type="button" disabled={doneRight.has(r.id) || locked} onClick={() => pickRight(r.id)}
               animate={flash === r.id ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }} data-state={doneRight.has(r.id) ? 'right' : flash === r.id ? 'wrong' : undefined}
-              className={`choice !px-3 !py-3 text-center ${size}`}>
+              className={`choice relative !px-3 !py-3 text-center ${size}`}>
+              <PairNo n={rightNo[r.id]} />
               {ex.type === 'gender_pairs' ? <Term text={r.text} /> : r.text}
             </motion.button>
           ))}
