@@ -61,7 +61,7 @@ export default function Decks() {
                     <LevelBar counts={counts} />
                   </Link>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => void setMeta('activeDeckId', d.id)}>{t('decks.setActive')}</button>
+                    <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => void setMeta('activeDeckId', d.id).then(() => nav('/'))} data-testid="use-on-path">{t('decks.setActive')}</button>
                     <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => nav(`/test/${d.id}`)} data-testid="test-btn">{t('decks.test')}</button>
                     {hasKind(d, 'noun') && <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => nav(`/drill/${d.id}?kind=articles`)}>{t('decks.drillArticles')}</button>}
                     {hasKind(d, 'number') && <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => nav(`/drill/${d.id}?kind=numbers`)}>{t('decks.drillNumbers')}</button>}
