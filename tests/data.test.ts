@@ -18,15 +18,17 @@ describe('repo', () => {
     await ensureSeed()
     await ensureSeed()
     expect(await db.profiles.count()).toBe(1)
-    expect(await db.decks.count()).toBe(7)
+    expect(await db.decks.count()).toBe(6)
     const decks = await db.decks.toArray()
     expect(decks.every((d) => d.course === 'Menschen A1' && d.cefr === 'A1' && d.l2 === 'German')).toBe(true)
     const words = await db.words.toArray()
-    expect(words).toHaveLength(12 + 8 + 12 + 20 + 16 + 10 + 41)
+    expect(words).toHaveLength(7 + 8 + 12 + 16 + 10 + 41)
+    expect(words.every((w) => !w.example)).toBe(true)
+    expect(decks.some((d) => d.name.includes('Erste'))).toBe(false)
     const zahlen = decks.find((d) => d.name.startsWith('Zahlen'))!
     expect(new Set(words.filter((w) => w.deckId === zahlen.id).map((w) => w.unitIndex)).size).toBe(4)
-    const familie = decks.find((d) => d.name.includes('Erste'))!
-    expect(new Set(words.filter((w) => w.deckId === familie.id).map((w) => w.unitIndex)).size).toBe(1)
+    const familie = decks.find((d) => d.name.includes('Familie'))!
+    expect(new Set(words.filter((w) => w.deckId === familie.id).map((w) => w.unitIndex)).size).toBe(2)
     const mutter = words.find((w) => w.term === 'die Mutter')!
     expect(mutter).toMatchObject({ type: 'noun', gender: 'die', plural: 'Mütter' })
     expect(await getMeta('activeProfileId')).toBeTruthy()
@@ -65,7 +67,7 @@ describe('lesson completion + persistence', () => {
   it('finishLesson stores progress/xp/streak and is visible after reading again', async () => {
     await ensureSeed()
     const profile = (await db.profiles.toCollection().first())!
-    const deck = (await db.decks.toArray()).find((d) => d.name.includes('Erste'))!
+    const deck = (await db.decks.toArray()).find((d) => d.name.includes('Familie'))!
     const words = await db.words.where('deckId').equals(deck.id).toArray()
     const rng = seededRng(3)
     const sel = selectLessonWords(words, new Map(), Date.now(), { mode: 'unit', size: 12, newRatio: 0.3, unitIndex: 0 }, rng)
@@ -105,7 +107,7 @@ describe('backup', () => {
   it('export -> wipe -> import restores everything', async () => {
     await ensureSeed()
     const profile = (await db.profiles.toCollection().first())!
-    const deck = (await db.decks.toArray()).find((d) => d.name.includes('Erste'))!
+    const deck = (await db.decks.toArray()).find((d) => d.name.includes('Familie'))!
     const w = (await db.words.where('deckId').equals(deck.id).first())!
     const now = Date.now()
     await finishLesson({
@@ -128,5 +130,33 @@ describe('backup', () => {
     expect(() => validateBackup({ app: 'x' })).toThrow('invalid_backup')
     expect(() => validateBackup({ app: 'lexi-path', version: 99 })).toThrow('backup_too_new')
     expect(() => validateBackup({ app: 'lexi-path', version: 1, decks: [] })).toThrow('invalid_backup')
+  })
+})
+
+describe('v4 cleanup of content the learner did not supply', () => {
+  it('drops the demo deck, assistant-added words and example sentences; keeps progress of kept words', async () => {
+    const { newProgress } = await import('../src/core/srs')
+    const { cleanSeedContent } = await import('../src/data/db')
+    const mk = (deckId: string, term: string, tags: string[], order: number, example?: string) =>
+      ({ id: `${deckId}-${term}`, deckId, unitIndex: 0, order, term, translations: ['x'], tags, ...(example ? { example, exampleRo: ['ro'] } : {}) })
+    await db.decks.bulkAdd([
+      { id: 'demo', name: 'Lektion 1 – Erste Wörter', createdAt: 1, l2: 'German', l1: 'Romanian' },
+      { id: 'wt', name: 'Lektion 3 – Wochentage', createdAt: 1, l2: 'German', l1: 'Romanian' },
+      { id: 'mine', name: 'Lektion 9 – Mein Heft', createdAt: 1, l2: 'German', l1: 'Romanian' },
+    ])
+    await db.words.bulkAdd([
+      mk('demo', 'der Vater', ['familie'], 0, 'Mein Vater.'),
+      mk('wt', 'der Montag', ['wochentage'], 0, 'Am Montag habe ich Schule.'),
+      mk('wt', 'heute', ['zeit'], 1, 'Heute ist Dienstag.'),
+      mk('mine', 'der Hund', [], 0, 'Der Hund bellt.'),
+    ])
+    await db.progress.bulkAdd([newProgress('p', 'demo-der Vater'), newProgress('p', 'wt-der Montag'), newProgress('p', 'wt-heute'), newProgress('p', 'mine-der Hund')])
+    await cleanSeedContent(db.decks, db.words, db.progress)
+    expect((await db.decks.toArray()).map((d) => d.id).sort()).toEqual(['mine', 'wt'])
+    expect((await db.words.toArray()).map((w) => w.id).sort()).toEqual(['mine-der Hund', 'wt-der Montag'])
+    expect((await db.words.get('wt-der Montag'))?.example).toBeUndefined()
+    expect((await db.words.get('wt-der Montag'))?.exampleRo).toBeUndefined()
+    expect((await db.words.get('mine-der Hund'))?.example).toBe('Der Hund bellt.') // user deck untouched
+    expect((await db.progress.toArray()).map((x) => x.wordId).sort()).toEqual(['mine-der Hund', 'wt-der Montag'])
   })
 })

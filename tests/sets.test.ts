@@ -11,7 +11,7 @@ import { current, planLesson, submitResult } from '../src/core/lesson'
 import { parseWordList, rowToInput } from '../src/core/parser'
 import { requiredSkills } from '../src/core/srs'
 import type { Word } from '../src/core/types'
-import { MONATE_TEXT, WOCHENTAGE_TEXT, ZAHLEN_TEXT } from '../src/data/seed'
+import { MONATE_TEXT, WOCHENTAGE_TEXT, ZAHLEN_TEXT } from './fixtures/seed-fixture'
 
 const wordsOf = (text: string, deckId = 'd'): Word[] =>
   parseWordList(text).rows.map((r, i) => ({ id: `${deckId}${i}`, deckId, unitIndex: 0, order: i, ...rowToInput(r) }))

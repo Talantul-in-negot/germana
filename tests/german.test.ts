@@ -5,7 +5,7 @@ import { applyUmlaut, expandPlural, parseGermanTerm, parseVerbForms, splitArticl
 import { allNumberWords, isCompoundNumber, numberBreakdown, numberDistractors, numberToGerman } from '../src/core/numbers'
 import { parseWordList, pluralDisplay } from '../src/core/parser'
 import { assignUnitsFor, unitSizes } from '../src/core/units'
-import { DEMO_TEXT, WFRAGEN_TEXT, ZAHLEN_TEXT } from '../src/data/seed'
+import { DEMO_TEXT, WFRAGEN_TEXT, ZAHLEN_TEXT } from './fixtures/seed-fixture'
 
 const row = (line: string) => parseWordList(line).rows[0]!
 

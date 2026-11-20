@@ -16,7 +16,7 @@ import {
 } from '../src/core/srs'
 import type { Word, WordProgress } from '../src/core/types'
 import { LexiDB } from '../src/data/db'
-import { VERBEN_TEXT, withSentenceTranslations } from '../src/data/seed'
+import { VERBEN_TEXT, withSentenceTranslations } from './fixtures/seed-fixture'
 
 const rows = parseWordList(VERBEN_TEXT).rows
 const items = withSentenceTranslations(rows.map(rowToInput))
@@ -387,7 +387,7 @@ describe('Dexie v2 -> v3 migration keeps progress', () => {
     old.close()
     const again = new LexiDB(name)
     await again.open()
-    expect(again.verno).toBe(3)
+    expect(again.verno).toBe(4)
     const row = (await again.progress.get(['p', 'w']))!
     expect(row.level).toBe(4)
     expect(row.interval).toBe(9)

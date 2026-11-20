@@ -8,7 +8,7 @@ import { seededRng } from '../src/core/id'
 import { parseWordList, rowToInput } from '../src/core/parser'
 import { requiredSkills } from '../src/core/srs'
 import type { Word } from '../src/core/types'
-import { FAMILIE_TEXT } from '../src/data/seed'
+import { FAMILIE_TEXT } from './fixtures/seed-fixture'
 
 const FAM: Word[] = parseWordList(FAMILIE_TEXT).rows.map((r, i) => ({ id: 'f' + i, deckId: 'f', unitIndex: 0, order: i, ...rowToInput(r) }))
 const find = (t: string): Word => FAM.find((w) => w.term === t) as Word

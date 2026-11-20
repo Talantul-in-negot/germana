@@ -49,3 +49,12 @@ Choices made without asking (the brief said: pick the simplest reasonable option
 * Speech recognition, TTS voices and the iPhone behaviour were not exercised in a real device here (only headless Chromium with speech stubbed).
 * The GitHub Pages workflow was written but not run (no repository was available); `npm run build` with a custom `VITE_BASE` was not exercised either.
 * Unit tests (243) cover `src/core` at ~94% statements (srs.ts ~97%); screens are covered only by 4 Playwright flows.
+
+## Cleanup of assistant-added content (Dexie v4)
+25. **Only supplied words ship**: W-Fragen 8, Zahlen 41, Wochentage 7, Jahresmonate 12, Familie 16, Verben 10; no demo course; all `example` fields empty.
+    Words dropped from Wochentage/Monate are everything without the `wochentage` / `monate` tag (this also covers übermorgen, vorgestern, die Jahreszeit, der Geburtstag,
+    which the assistant had added besides the words named in the brief).
+26. **Migration v4** (`cleanSeedContent` in `data/db.ts`) matches the shipped lessons by name, deletes the demo deck and the non-supplied words with their progress,
+    clears `example`/`exampleRo` on the remaining seed words and re-numbers unit indices. Other decks (imported by the adult) are never touched. Progress rows of kept words are untouched.
+27. **Tests keep their own example-rich fixture** (`tests/fixtures/seed-fixture.ts`); the shipped seed no longer has `VERB_SENTENCE_RO`.
+28. **No exercise code changed**: sentence exercises appear for any word that has an example; Conjugare stage 2 already falls back to the "pronoun ___ (verb)" rows.

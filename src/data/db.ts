@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie'
+import { assignUnitsFor } from '../core/units'
 import type { Achievement, Deck, Profile, SessionLog, TestResult, Word, WordProgress } from '../core/types'
 
 export interface MetaRow {
@@ -61,6 +62,54 @@ export class LexiDB extends Dexie {
       meta: 'key',
       tests: 'id, profileId, deckId',
     })
+    // v4: remove content the learner did not supply (demo deck, assistant-added words, assistant-written
+    // example sentences). Progress on the kept words is untouched.
+    this.version(4)
+      .stores({})
+      .upgrade(async (tx) => {
+        await cleanSeedContent(tx.table('decks'), tx.table('words'), tx.table('progress'))
+      })
+  }
+}
+
+const DEMO_DECK = 'Lektion 1 – Erste Wörter'
+/** Shipped lessons -> the only tag that marks words the learner supplied (null = keep all words). */
+const SEED_KEEP_TAG: Record<string, string | null> = {
+  'Lektion 2 – W-Fragen': null,
+  'Lektion 3 – Wochentage': 'wochentage',
+  'Lektion 4 – Jahresmonate': 'monate',
+  'Lektion 5 – Familie': null,
+  'Lektion 6 – Verben (Präsens)': null,
+  'Zahlen 0–40': null,
+}
+
+/** Shared by the v4 upgrade (and its test). */
+export async function cleanSeedContent(decks: Table<Deck, string>, words: Table<Word, string>, progress: Table<WordProgress, [string, string]>): Promise<void> {
+  const removeWords = async (ids: string[]) => {
+    if (!ids.length) return
+    await progress.where('wordId').anyOf(ids).delete()
+    await words.bulkDelete(ids)
+  }
+  for (const deck of await decks.toArray()) {
+    const mine = await words.where('deckId').equals(deck.id).toArray()
+    if (deck.name === DEMO_DECK) {
+      await removeWords(mine.map((w) => w.id))
+      await decks.delete(deck.id)
+      continue
+    }
+    if (!(deck.name in SEED_KEEP_TAG)) continue
+    const keepTag = SEED_KEEP_TAG[deck.name]
+    const drop = keepTag ? mine.filter((w) => !(w.tags ?? []).includes(keepTag)) : []
+    await removeWords(drop.map((w) => w.id))
+    const dropped = new Set(drop.map((w) => w.id))
+    const kept = mine.filter((w) => !dropped.has(w.id)).sort((a, b) => a.order - b.order)
+    const units = assignUnitsFor(kept)
+    await words.bulkPut(
+      kept.map((w, i) => {
+        const { example: _e, exampleRo: _r, ...rest } = w
+        return { ...rest, order: i, unitIndex: units[i] ?? 0 }
+      }),
+    )
   }
 }
 

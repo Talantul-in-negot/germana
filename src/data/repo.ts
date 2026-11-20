@@ -5,7 +5,7 @@ import { newProgress } from '../core/srs'
 import { assignUnitsFor } from '../core/units'
 import type { Cefr, Deck, Profile, ProfileSettings, TestResult, Word, WordProgress } from '../core/types'
 import { db } from './db'
-import { COURSE, GERMAN_SEEDS, withSentenceTranslations } from './seed'
+import { COURSE, GERMAN_SEEDS } from './seed'
 
 export const DEFAULT_SETTINGS: ProfileSettings = { ttsVoice: null, ttsRate: 0.9, sound: true, hearts: false, speaking: false, genderColors: true }
 export const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🦄', '🐙', '🦉', '🐧', '🐝', '🦖']
@@ -205,7 +205,7 @@ export async function ensureSeed(): Promise<void> {
         await setMeta(key, true)
         continue
       }
-      const items = withSentenceTranslations(parseWordList(seed.text).rows.filter((r) => r.valid).map(rowToInput))
+      const items = parseWordList(seed.text).rows.filter((r) => r.valid).map(rowToInput)
       await createDeck(seed.name, items, { course: COURSE, cefr: 'A1', lesson: seed.lesson })
       await setMeta(key, true)
     }
