@@ -76,10 +76,13 @@ export default function DeckDetail() {
                   {(w.plural || w.verb?.present3sg) && (
                     <p className="truncate text-xs text-slate-500">
                       {w.plural ? `${w.pluralOnly ? '(Pl.) ' : 'Pl.: die '}${w.plural}${w.pluralAlternatives?.length ? ` | die ${w.pluralAlternatives.join(' | die ')}` : ''}` : ''}
-                      {w.verb?.present3sg ? [w.verb.present3sg, w.verb.praeteritum, w.verb.perfekt].filter(Boolean).join(', ') : ''}
+                      {w.verb?.present ? `P: ${w.verb.present.join(', ')}` : w.verb?.present3sg ? [w.verb.present3sg, w.verb.praeteritum, w.verb.perfekt].filter(Boolean).join(', ') : ''}
                     </p>
                   )}
                 </div>
+                {w.verb?.present && (
+                  <button className="rounded-xl bg-brand-soft px-2 py-1 text-xs font-black text-brand-dark" onClick={() => nav(`/conj/${id}/${w.id}`)} data-testid={`conj-btn-${w.term}`}>{t('conj.button')}</button>
+                )}
                 <LevelBadge level={levelOf(progress.get(w.id))} />
                 <button aria-label={t('common.edit')} className="text-xl" onClick={() => open(w)}>✏️</button>
                 <button aria-label={t('common.delete')} className="text-xl" onClick={() => setDel(w)}>🗑️</button>

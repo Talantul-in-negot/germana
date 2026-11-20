@@ -2,8 +2,9 @@ import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { groupByCourse, sortDecks } from '../core/decks'
-import { HEART_REFILL_MS, crownFor, refillHearts, unitMastery, unitStatus, type UnitStatus } from '../core/gamification'
-import { isDue } from '../core/srs'
+import { HEART_REFILL_MS, conjTier, crownFor, refillHearts, unitMastery, unitStatus, type UnitStatus } from '../core/gamification'
+import { allVerbsUnlocked, stagesPassed } from '../core/conjugation'
+import { isDue, personStrengths } from '../core/srs'
 import { levelOf } from '../core/srs'
 import { Crowns, Mascot, Sheet } from '../components/ui'
 import { useDeckWords, useDecks, useMeta, useProgressMap } from '../data/hooks'
@@ -124,6 +125,36 @@ export default function Home() {
           )
         })}
       </ol>
+
+      {words.some((w) => w.verb?.present) && (
+        <section className="mb-8" data-testid="conj-nodes">
+          <h2 className="mb-2 text-sm font-black uppercase tracking-wide text-slate-500">{t('conj.title')}</h2>
+          <ul className="grid grid-cols-3 gap-3">
+            {words.filter((w) => w.verb?.present).map((v) => {
+              const p = progress.get(v.id)
+              const tier = conjTier(stagesPassed(p?.conj), p ? personStrengths(p, now) : [])
+              return (
+                <li key={v.id}>
+                  <button className="card flex w-full flex-col items-center gap-1 !p-2" onClick={() => nav(`/conj/${deck.id}/${v.id}`)} data-testid={`conj-node-${v.term}`}>
+                    <span className="text-lg font-black">{v.term}</span>
+                    <Crowns tier={tier} size={14} />
+                  </button>
+                </li>
+              )
+            })}
+            <li>
+              {(() => {
+                const unlocked = allVerbsUnlocked(words.filter((w) => w.verb?.present).map((w) => stagesPassed(progress.get(w.id)?.conj)))
+                return (
+                  <button className={`card flex h-full w-full flex-col items-center justify-center gap-1 !p-2 ${unlocked ? '' : 'opacity-50'}`} onClick={() => nav(`/conj/${deck.id}/all`)} data-testid="conj-node-all">
+                    <span className="text-sm font-black">{unlocked ? '★' : '🔒'} {t('conj.allVerbs')}</span>
+                  </button>
+                )
+              })()}
+            </li>
+          </ul>
+        </section>
+      )}
 
       <Sheet open={sel !== undefined} onClose={() => setOpenUnit(null)}>
         {sel && (

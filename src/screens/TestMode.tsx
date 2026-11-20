@@ -7,6 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   buildExercise, contextOf, hasMaskableExample, isSetComplete, setWordsOf, type Exercise, type Outcome,
 } from '../core/exercises'
+import { PERSONS } from '../core/conjugation'
 import { SEQ_SETS } from '../core/german'
 import { seededRng, shuffle } from '../core/id'
 import type { TestExtra, TestResult, TestWordResult, Word } from '../core/types'
@@ -24,6 +25,8 @@ interface Item {
   ex: Exercise
   word?: Word
   dir?: Dir
+  /** present-tense person typed in this item (verbs) */
+  person?: number
   /** set tag for a sequence extra */
   set?: string
 }
@@ -35,6 +38,8 @@ export function buildTestItems(words: Word[], rng: () => number = Math.random): 
   for (const w of words) {
     items.push({ ex: buildExercise(w, 'type_l2_l1', ctx), word: w, dir: 'deToRo' })
     items.push({ ex: buildExercise(w, 'type_l1_l2', ctx), word: w, dir: 'roToDe' })
+    // verbs with a table: all 6 persons are typed (no card, no dropdown)
+    if (w.verb?.present) for (let p = 0; p < 6; p++) items.push({ ex: buildExercise(w, 'verb_pronoun_type', { ...ctx, person: p }), word: w, person: p })
     if (words.length >= 4 && contextOf(w)) items.push({ ex: buildExercise(w, 'context_choice', ctx), word: w, dir: 'context' })
     else if (words.length >= 3 && hasMaskableExample(w)) items.push({ ex: buildExercise(w, 'fill_blank', ctx), word: w, dir: 'context' })
   }
@@ -89,6 +94,7 @@ export function ResultView({ result, words }: { result: TestResult; words: Word[
               <th className="p-2">{t('test.dir.deRo')}</th>
               <th className="p-2">{t('test.dir.roDe')}</th>
               <th className="p-2">{t('test.dir.context')}</th>
+              {result.words.some((w) => w.persons?.length) && <th className="p-2">{t('test.persons')}</th>}
             </tr>
           </thead>
           <tbody>
@@ -98,6 +104,23 @@ export function ResultView({ result, words }: { result: TestResult; words: Word[
                 <td className="p-2">{mark(w.deToRo)}{cell(w.deToRo)}</td>
                 <td className="p-2">{mark(w.roToDe)}{cell(w.roToDe)}</td>
                 <td className="p-2">{mark(w.context)}{cell(w.context)}</td>
+                {result.words.some((x) => x.persons?.length) && (
+                  <td className="p-2" data-testid="persons-cell">
+                    {w.persons?.length ? (
+                      <ul className="grid gap-0.5 text-xs">
+                        {PERSONS.map((p, i) => {
+                          const d = w.persons?.[i]
+                          return (
+                            <li key={p}>
+                              {d ? <span className={d.ok ? 'font-black text-good' : 'font-black text-bad'}>{d.ok ? '✓' : '✗'}</span> : '—'} {p}
+                              {d && !d.ok ? <> <span className="text-bad">{d.given || '…'}</span> → <b>{d.expected}</b></> : null}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    ) : null}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -156,7 +179,16 @@ export default function TestMode() {
     const extras: TestExtra[] = []
     for (const { it, o } of answers.current) {
       const rec = { ok: o.correct, given: o.given ?? '', expected: o.expected }
-      if (it.word && it.dir) {
+      if (it.word && it.person !== undefined) {
+        const cur = byWord.get(it.word.id) ?? {
+          wordId: it.word.id, term: it.word.term, deToRo: null, roToDe: null, context: null,
+          ...(it.word.group ? { group: it.word.group } : {}),
+        }
+        const persons = cur.persons ? cur.persons.slice() : []
+        persons[it.person] = rec
+        cur.persons = persons
+        byWord.set(it.word.id, cur)
+      } else if (it.word && it.dir) {
         const cur = byWord.get(it.word.id) ?? {
           wordId: it.word.id, term: it.word.term, deToRo: null, roToDe: null, context: null,
           ...(it.word.group ? { group: it.word.group } : {}),

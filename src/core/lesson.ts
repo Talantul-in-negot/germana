@@ -107,9 +107,13 @@ export function planLesson(
     for (const w of words) {
       if (queue.length >= target) break
       const cctx = { deckSize: deckWords.length, speakEnabled, rng: ctx.rng }
-      const type = infoOf ? chooseTypeFor(w, infoOf(w), cctx, lastType[w.id]) : chooseType(w, levelOf(w.id), cctx, lastType[w.id])
+      const info = infoOf?.(w)
+      const type = info ? chooseTypeFor(w, info, cctx, lastType[w.id]) : chooseType(w, levelOf(w.id), cctx, lastType[w.id])
       lastType[w.id] = type
-      queue.push(buildExercise(w, type, ctx))
+      // present-tense verbs practise their weakest person
+      const ps = info?.personStrengths
+      const weakest = ps && ps.length === 6 ? ps.indexOf(Math.min(...ps)) : undefined
+      queue.push(buildExercise(w, type, { ...ctx, level: info?.level ?? levelOf(w.id), ...(weakest !== undefined && weakest >= 0 ? { person: weakest } : {}) }))
     }
   }
   return { queue, cursor: 0, results: [], requeued: 0, lastType }

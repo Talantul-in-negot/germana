@@ -5,6 +5,8 @@ import { ProfileProvider } from './data/profile-context'
 import { ensureSeed } from './data/repo'
 import { t } from './i18n'
 import DeckDetail from './screens/DeckDetail'
+import AllVerbs from './screens/AllVerbs'
+import Conj from './screens/Conj'
 import Decks from './screens/Decks'
 import Drill from './screens/Drill'
 import Install from './screens/Install'
@@ -34,6 +36,8 @@ export default function App() {
         <Routes>
           <Route path="/lesson/:deckId" element={<KeyedLesson />} />
           <Route path="/test/:deckId" element={<TestMode />} />
+          <Route path="/conj/:deckId/all" element={<AllVerbs />} />
+          <Route path="/conj/:deckId/:wordId" element={<Conj />} />
           <Route path="/drill/:deckId" element={<Drill />} />
           <Route element={<Layout />}>
             <Route index element={<Home />} />

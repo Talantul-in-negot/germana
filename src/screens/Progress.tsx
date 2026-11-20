@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ACHIEVEMENTS } from '../core/gamification'
-import { DAY_MS, accuracyOf, dayKey, isDue, levelOf, needsPractice, wordStrengthAt } from '../core/srs'
+import { DAY_MS, accuracyOf, dayKey, isDue, levelOf, needsPractice, personStrengths, wordStrengthAt } from '../core/srs'
+import { PERSONS } from '../core/conjugation'
 import type { Word, WordProgress } from '../core/types'
 import { LevelBadge, LevelBar, StrengthBar } from '../components/ui'
 import { useAchievements, useDeckWords, useDecks, useMeta, useProgressMap, useSessions } from '../data/hooks'
@@ -160,6 +161,16 @@ export default function Progress() {
                   <LevelBadge level={levelOf(p)} />
                 </div>
                 <StrengthBar value={s} />
+                {w.verb?.present && (
+                  <ul className="mt-2 flex gap-2" aria-label={t('conj.dots')} data-testid="person-dots">
+                    {(p ? personStrengths(p, now) : [0, 0, 0, 0, 0, 0]).map((st, i) => (
+                      <li key={i} title={`${PERSONS[i]}: ${st}%`} className="text-center text-[10px] font-bold text-slate-500">
+                        <span className={`mx-auto mb-0.5 block h-3.5 w-3.5 rounded-full ${st >= 70 ? 'bg-green-500' : st >= 40 ? 'bg-amber-400' : st > 0 ? 'bg-red-400' : 'bg-slate-200'}`} />
+                        {PERSONS[i]}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <div className="mt-1 flex justify-between text-xs font-bold text-slate-500">
                   <span>{t('progress.col.strength')} {s}%{practice && <span className="text-amber-600"> · {t('progress.needsPractice')}</span>}</span>
                   <span>{acc === null ? '—' : `${Math.round(acc * 100)}%`} · {nextReviewLabel(p, now)}</span>

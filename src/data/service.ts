@@ -173,6 +173,9 @@ export { ACHIEVEMENTS }
 
 export const VERIFIED_AT = 0.9
 
+/** A verb counts as correct in the lesson test with >= 5 of 6 persons right. */
+export const personsOk = (ps: readonly { ok: boolean }[]): boolean => ps.filter((p) => p.ok).length >= 5
+
 export interface FinishTestInput {
   profileId: string
   deckId: string
@@ -190,6 +193,10 @@ export function scoreTest(words: readonly TestWordResult[], extras: readonly Tes
       total += 1
       if (d.ok) correct += 1
     }
+    if (w.persons?.length) {
+      total += 1
+      if (personsOk(w.persons)) correct += 1
+    }
   }
   return { correct, total, score: total ? correct / total : 0 }
 }
@@ -204,6 +211,10 @@ export function groupScores(words: readonly TestWordResult[]): { group: string; 
       if (!d) continue
       g.total += 1
       if (d.ok) g.correct += 1
+    }
+    if (w.persons?.length) {
+      g.total += 1
+      if (personsOk(w.persons)) g.correct += 1
     }
     m.set(w.group, g)
   }
@@ -220,7 +231,7 @@ export async function finishTest(input: FinishTestInput): Promise<TestResult> {
       ...(input.extras?.length ? { extras: input.extras } : {}),
     }
     await db.tests.add(result)
-    const failed = input.words.filter((w) => [w.deToRo, w.roToDe, w.context].some((d) => d && !d.ok))
+    const failed = input.words.filter((w) => [w.deToRo, w.roToDe, w.context].some((d) => d && !d.ok) || (w.persons?.length ? !personsOk(w.persons) : false))
     const rows = (await db.progress.bulkGet(failed.map((w) => [input.profileId, w.wordId] as [string, string]))).filter(
       (p): p is NonNullable<typeof p> => !!p,
     )

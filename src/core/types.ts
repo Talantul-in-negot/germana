@@ -209,6 +209,8 @@ export interface TestWordResult {
   deToRo: { ok: boolean; given: string; expected: string } | null
   roToDe: { ok: boolean; given: string; expected: string } | null
   context: { ok: boolean; given: string; expected: string } | null
+  /** present-tense verbs: the 6 persons typed (no card, no dropdown); null = not tested */
+  persons?: { ok: boolean; given: string; expected: string }[]
 }
 
 /** Extra scored items that are not per-word (e.g. the weekday sequence). */

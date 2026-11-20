@@ -1,5 +1,5 @@
 /** Tiny synthesized sound effects (WebAudio) — no audio assets, original sounds. */
-export type Sfx = 'correct' | 'wrong' | 'levelup' | 'achievement' | 'finish'
+export type Sfx = 'correct' | 'wrong' | 'levelup' | 'achievement' | 'finish' | 'beep'
 
 let ctx: AudioContext | null = null
 
@@ -8,9 +8,11 @@ const SEQUENCES: Record<Sfx, { f: number; d: number; type?: OscillatorType }[]> 
   wrong: [{ f: 220, d: 0.14, type: 'sawtooth' }, { f: 165, d: 0.18, type: 'sawtooth' }],
   levelup: [{ f: 523, d: 0.09 }, { f: 659, d: 0.09 }, { f: 784, d: 0.14 }],
   achievement: [{ f: 523, d: 0.1 }, { f: 659, d: 0.1 }, { f: 784, d: 0.1 }, { f: 1047, d: 0.25 }],
+  beep: [{ f: 880, d: 0.18 }],
   finish: [{ f: 392, d: 0.12 }, { f: 523, d: 0.12 }, { f: 659, d: 0.12 }, { f: 784, d: 0.3 }],
 }
 
+/** Plays a short synthesized sound (`beep` marks the blank in listening exercises). */
 export function playSfx(name: Sfx, enabled: boolean): void {
   if (!enabled || typeof window === 'undefined') return
   try {

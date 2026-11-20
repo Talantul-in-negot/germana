@@ -8,12 +8,14 @@ import {
   type LessonMode, type LessonRuntime, type LessonResultItem,
 } from '../core/lesson'
 import { refillHearts } from '../core/gamification'
+import { hasPresent } from '../core/conjugation'
 import { COLLECTIVES, isSetComplete, partnerOf } from '../core/exercises'
+import { ConjCard } from '../components/ConjCard'
 import { SEQ_SETS, seqOf, splitArticle } from '../core/german'
-import { effectiveLevel, skillLevel } from '../core/srs'
+import { effectiveLevel, personStrengths, skillLevel } from '../core/srs'
 import { FeedbackBody } from '../components/Feedback'
 import { ExerciseView } from '../components/exercises/ExerciseView'
-import { Confirm, Mascot } from '../components/ui'
+import { Confirm, Mascot, Sheet } from '../components/ui'
 import { useProfile } from '../data/profile-context'
 import { db } from '../data/db'
 import { progressMap, updateProfile } from '../data/repo'
@@ -21,7 +23,7 @@ import { finishLesson, type FinishOutput } from '../data/service'
 import type { Word } from '../core/types'
 import { t } from '../i18n'
 import { playSfx } from '../lib/sound'
-import { langFor, speak, sttSupported, type SpeechLang } from '../lib/speech'
+import { langFor, speak, speakWithBeep, sttSupported, type SpeechLang } from '../lib/speech'
 import Summary from './Summary'
 
 type Phase = 'loading' | 'empty' | 'noHearts' | 'info' | 'answering' | 'feedback' | 'saving' | 'summary'
@@ -45,6 +47,7 @@ export default function Lesson() {
   const [levelUps, setLevelUps] = useState<FinishOutput['levelUps']>([])
   const [lang, setLang] = useState<SpeechLang>('de-DE')
   const [cards, setCards] = useState<('days' | 'months')[]>([])
+  const [card, setCard] = useState<Word | null>(null)
 
   const checkRef = useRef<(() => Outcome) | null>(null)
   const words = useRef<Word[]>([])
@@ -53,10 +56,17 @@ export default function Lesson() {
   const heartsLost = useRef(0)
   const ctxRef = useRef<{ rng: () => number; newId: () => string; seenNumbers: Word[] }>({ rng: Math.random, newId: uid, seenNumbers: [] })
   const started = useRef(false)
+  const levels = useRef<Map<string, number>>(new Map())
+  const shownCards = useRef<Set<string>>(new Set())
+  const peeks = useRef(0)
 
   const heartsOn = s.hearts && mode !== 'review'
   const speakOn = s.speaking && sttSupported()
 
+  const sayParts = useCallback(
+    (before: string, after: string) => speakWithBeep(before, after, () => playSfx('beep', true), { voice: s.ttsVoice, rate: s.ttsRate, lang }),
+    [s.ttsVoice, s.ttsRate, lang],
+  )
   const say = useCallback((text: string) => speak(text, { voice: s.ttsVoice, rate: s.ttsRate, lang }), [s.ttsVoice, s.ttsRate, lang])
 
   useEffect(() => {
@@ -76,6 +86,7 @@ export default function Lesson() {
       const sel = selectLessonWords(all, prog, now, { mode, size: DEFAULT_LESSON.size, newRatio: DEFAULT_LESSON.newRatio, unitIndex: unit }, Math.random)
       const picked = sel.wordIds.map((id) => all.find((w) => w.id === id)).filter((w): w is Word => !!w)
       if (picked.length === 0) return setPhase('empty')
+      levels.current = new Map(all.map((w) => [w.id, prog.get(w.id) ? effectiveLevel(prog.get(w.id) as never) : 0]))
       const seenNumbers = all.filter((w) => w.value !== undefined && (prog.get(w.id)?.level ?? 0) > 0)
       ctxRef.current.seenNumbers = seenNumbers
       const infoOf = (w: Word) => {
@@ -86,6 +97,7 @@ export default function Lesson() {
           seenNumbers,
           completeSets: SEQ_SETS.filter((set) => isSetComplete(all, set)).map((set) => set.tag),
           hasSeasons: isSetComplete(all, SEQ_SETS[2] as (typeof SEQ_SETS)[number]),
+          ...(p ? { personStrengths: personStrengths(p, now) } : {}),
           hasPairs: all.some((x) => partnerOf(x, all) !== null),
           collectives: all.some((x) => COLLECTIVES.some((c) => c.word === splitArticle(x.term).rest)),
         }
@@ -99,6 +111,17 @@ export default function Lesson() {
       setPhase(kinds.length ? 'info' : 'answering')
     })()
   }, [deckId, mode, unit, profile, s.hearts, speakOn])
+
+  // a verb's conjugation card is shown when the verb first appears (level 0)
+  useEffect(() => {
+    if (phase !== 'answering' || !rt) return
+    const e = current(rt)
+    const w = e ? words.current.find((x) => x.id === e.wordId) : undefined
+    if (w && hasPresent(w) && (levels.current.get(w.id) ?? 0) === 0 && !shownCards.current.has(w.id)) {
+      shownCards.current.add(w.id)
+      setCard(w)
+    }
+  }, [phase, rt])
 
   const onReady = useCallback((fn: (() => Outcome) | null) => {
     checkRef.current = fn
@@ -128,7 +151,7 @@ export default function Lesson() {
       setPhase('saving')
       const out = await finishLesson({
         profileId: profile.id, deckId, sessionId: sessionId.current, results: final.results, startedAt: startedAt.current,
-        now: Date.now(), mode, heartsLost: lost,
+        now: Date.now(), mode, heartsLost: lost, xpPenalty: peeks.current * 2,
       })
       setResult(out)
       setLevelUps(out.levelUps)
@@ -211,6 +234,8 @@ export default function Lesson() {
   if (!rt || !ex) return null
   const feedback = phase === 'feedback' && outcome
   const word = words.current.find((w) => w.id === ex.wordId)
+  // levels 0-2: peeking at the card is possible (and costs a little XP); hidden from level 3
+  const peekable = !!word && hasPresent(word) && (levels.current.get(word.id) ?? 0) <= 2
 
   return (
     <div className="mx-auto flex h-full max-w-lg flex-col">
@@ -219,13 +244,17 @@ export default function Lesson() {
         <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-200" role="progressbar">
           <motion.div className="h-full rounded-full bg-good" animate={{ width: `${Math.max(4, progressRatio(rt) * 100)}%` }} />
         </div>
+        {peekable && (
+          <button aria-label={t('conj.peek', { n: 2 })} title={t('conj.peek', { n: 2 })} className="rounded-full bg-sky-100 px-2.5 py-0.5 text-lg font-black text-sky-700"
+            data-testid="peek-card" onClick={() => { peeks.current += 1; setCard(word as Word) }}>ⓘ</button>
+        )}
         {heartsOn && <span className="font-black text-bad">❤ {hearts}</span>}
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 pb-44 pt-6">
         <AnimatePresence mode="wait">
           <motion.div key={ex.id} initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.18 }}>
-            <ExerciseView ex={ex} locked={phase === 'feedback'} outcome={outcome} onReady={onReady} onSubmit={commit} say={say} lang={lang} />
+            <ExerciseView ex={ex} locked={phase === 'feedback'} outcome={outcome} onReady={onReady} onSubmit={commit} say={say} sayParts={sayParts} lang={lang} />
           </motion.div>
         </AnimatePresence>
       </main>
@@ -248,6 +277,14 @@ export default function Lesson() {
         </div>
       </footer>
 
+      <Sheet open={card !== null} onClose={() => setCard(null)}>
+        {card && (
+          <div>
+            <ConjCard word={card} />
+            <button className="btn btn-primary mt-4 w-full" onClick={() => setCard(null)} data-testid="card-close">{t('common.close')}</button>
+          </div>
+        )}
+      </Sheet>
       <Confirm open={exit} text={t('lesson.exitConfirm')} onYes={() => nav('/')} onNo={() => setExit(false)} />
     </div>
   )

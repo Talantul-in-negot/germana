@@ -24,6 +24,8 @@ export interface ExerciseProps<E extends Exercise = Exercise> {
   onReady: (check: (() => Outcome) | null) => void
   onSubmit: (o: Outcome) => void
   say: (text: string) => void
+  /** read `before`, beep for the blank, read `after` */
+  sayParts?: (before: string, after: string) => void
   lang?: SpeechLang
 }
 
@@ -43,16 +45,17 @@ function Title({ type }: { type: Exercise['type'] }) {
 const LISTEN_CHOICE = new Set(['listen_choose', 'context_listen', 'listen_ro'])
 const TERM_OPTIONS = new Set(['mc_l1_l2', 'listen_choose', 'fill_blank', 'collective'])
 
-export function ChoiceView({ ex, locked, outcome, onReady, say }: ExerciseProps<ChoiceExercise>) {
+export function ChoiceView({ ex, locked, outcome, onReady, say, sayParts }: ExerciseProps<ChoiceExercise>) {
   const [sel, setSel] = useState<number | null>(null)
-  const isListen = LISTEN_CHOICE.has(ex.type)
+  const isListen = LISTEN_CHOICE.has(ex.type) || ex.type === 'verb_listen_blank'
+  const playIt = (): void => (ex.speakParts && sayParts ? sayParts(ex.speakParts[0], ex.speakParts[1]) : say(ex.speak ?? ''))
 
   useEffect(() => {
     onReady(sel === null ? null : () => evaluateChoice(ex, sel))
   }, [sel, ex, onReady])
 
   useEffect(() => {
-    if (isListen && ex.speak) say(ex.speak)
+    if (isListen && (ex.speak || ex.speakParts)) playIt()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ex.id])
 
@@ -71,7 +74,7 @@ export function ChoiceView({ ex, locked, outcome, onReady, say }: ExerciseProps<
       <Title type={ex.type} />
       <div className="mb-5 flex items-center gap-3">
         {isListen ? (
-          <SpeakerButton big={ex.type === 'listen_choose' || ex.type === 'listen_ro'} onClick={() => say(ex.speak ?? '')} />
+          <SpeakerButton big={ex.type === 'listen_choose' || ex.type === 'listen_ro'} onClick={playIt} />
         ) : (
           <>
             {ex.speak && ex.type === 'mc_l2_l1' && <SpeakerButton onClick={() => say(ex.speak ?? '')} />}
@@ -99,10 +102,35 @@ export function ChoiceView({ ex, locked, outcome, onReady, say }: ExerciseProps<
   )
 }
 
+/** Sentence with an inline dropdown: "Ich [ bin ▾ ] zehn Jahre alt." */
+export function DropdownView({ ex, locked, outcome, onReady }: ExerciseProps<ChoiceExercise>) {
+  const [sel, setSel] = useState<number | null>(null)
+  useEffect(() => {
+    onReady(sel === null ? null : () => evaluateChoice(ex, sel))
+  }, [sel, ex, onReady])
+  const inl = ex.inline as { before: string; after: string }
+  const state = locked && outcome ? (outcome.correct ? 'border-good bg-good-soft' : 'border-bad bg-bad-soft') : 'border-slate-300 bg-white'
+  return (
+    <div>
+      <Title type="verb_dropdown" />
+      <p className="text-2xl font-bold leading-[3.2rem]" data-testid="prompt">
+        {inl.before}
+        <select className={`mx-1 inline-block rounded-xl border-2 px-2 py-1 text-xl font-bold ${state}`} value={sel ?? ''} disabled={locked}
+          onChange={(e) => setSel(e.target.value === '' ? null : Number(e.target.value))} data-testid="verb-select" aria-label={t('ex.pickForm')}>
+          <option value="">{t('ex.pickForm')}</option>
+          {ex.options.map((o, i) => <option key={o} value={i}>{o}</option>)}
+        </select>
+        {inl.after}
+      </p>
+    </div>
+  )
+}
+
 export function MatchView({ ex, locked, onSubmit, say }: ExerciseProps<MatchExercise>) {
   const rights = useMemo(() => shuffle(ex.pairs.map((p) => ({ id: p.wordId, text: p.right }))), [ex])
   const [left, setLeft] = useState<string | null>(null)
   const [done, setDone] = useState<Set<string>>(new Set())
+  const [doneRight, setDoneRight] = useState<Set<string>>(new Set())
   const [flash, setFlash] = useState<string | null>(null)
   const targetMistakes = useRef(0)
   const submitted = useRef(false)
@@ -115,17 +143,22 @@ export function MatchView({ ex, locked, onSubmit, say }: ExerciseProps<MatchExer
     setLeft(id)
   }
   const pickRight = (id: string) => {
-    if (locked || !left || done.has(id)) return
-    if (left === id) {
-      const next = new Set(done).add(id)
+    if (locked || !left || doneRight.has(id)) return
+    const pair = ex.pairs.find((x) => x.wordId === left)
+    const clicked = rights.find((r) => r.id === id)
+    // identical right-hand text (er/sie/es -t, ihr -t) counts as a match
+    const ok = left === id || (pair !== undefined && clicked !== undefined && pair.right === clicked.text)
+    if (ok) {
+      const next = new Set(done).add(left)
       setDone(next)
+      setDoneRight(new Set(doneRight).add(id))
       setLeft(null)
       if (next.size === ex.pairs.length && !submitted.current) {
         submitted.current = true
         onSubmit(evaluateMatch(ex, targetMistakes.current))
       }
     } else {
-      if (left === ex.wordId || id === ex.wordId) targetMistakes.current += 1
+      if (ex.type === 'verb_endings' || left === ex.wordId || id === ex.wordId) targetMistakes.current += 1
       setFlash(id)
       setTimeout(() => setFlash(null), 350)
       setLeft(null)
@@ -147,8 +180,8 @@ export function MatchView({ ex, locked, onSubmit, say }: ExerciseProps<MatchExer
         </div>
         <div className="grid gap-3">
           {rights.map((r) => (
-            <motion.button key={r.id} type="button" disabled={done.has(r.id) || locked} onClick={() => pickRight(r.id)}
-              animate={flash === r.id ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }} data-state={done.has(r.id) ? 'right' : flash === r.id ? 'wrong' : undefined}
+            <motion.button key={r.id} type="button" disabled={doneRight.has(r.id) || locked} onClick={() => pickRight(r.id)}
+              animate={flash === r.id ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }} data-state={doneRight.has(r.id) ? 'right' : flash === r.id ? 'wrong' : undefined}
               className={`choice !px-3 !py-3 text-center ${size}`}>
               {ex.type === 'gender_pairs' ? <Term text={r.text} /> : r.text}
             </motion.button>
@@ -170,7 +203,7 @@ export function TypeView({ ex, locked, outcome, onReady, say, onSubmit, lang }: 
   const isSpeak = ex.type === 'speak'
   const isListen = LISTEN_TYPE.has(ex.type)
   const isDigits = ex.digits !== undefined
-  const german = !!ex.de && !isDigits
+  const german = (!!ex.de || !!ex.exact) && !isDigits
 
   useEffect(() => {
     if (isSpeak) return
@@ -378,17 +411,17 @@ export function SentenceView({ ex, locked, onReady, say }: ExerciseProps<Sentenc
     onReady(built.length ? () => evaluateSentence(ex, built.map((i) => ex.bank[i] as string)) : null)
   }, [built, ex, onReady])
   useEffect(() => {
-    say(ex.speak)
+    if (!ex.noSpeak) say(ex.speak)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ex.id])
 
   const remaining = ex.bank.map((w, i) => ({ w, i })).filter((x) => !built.includes(x.i))
   return (
     <div>
-      <Title type="sentence_build" />
+      <Title type={ex.type} />
       <div className="mb-4 flex items-center gap-3">
-        <SpeakerButton onClick={() => say(ex.speak)} />
-        <p className="font-bold text-slate-600"><Term text={ex.prompt} /></p>
+        {!ex.noSpeak && <SpeakerButton onClick={() => say(ex.speak)} />}
+        <p className="font-bold text-slate-600" data-testid="prompt"><Term text={ex.prompt} /></p>
       </div>
       <div className="mb-4 flex min-h-24 flex-wrap content-start gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-white p-3" data-testid="sentence-line">
         {built.map((bi) => (
@@ -425,10 +458,13 @@ export function ExerciseView(p: ExerciseProps) {
     case 'season_months':
     case 'collective':
     case 'possessive':
+    case 'verb_pronoun':
+    case 'verb_listen_blank':
       return <ChoiceView {...(p as ExerciseProps<ChoiceExercise>)} />
     case 'match':
     case 'match_qa':
     case 'gender_pairs':
+    case 'verb_endings':
       return <MatchView {...(p as ExerciseProps<MatchExercise>)} />
     case 'type_l1_l2':
     case 'type_l2_l1':
@@ -439,8 +475,10 @@ export function ExerciseView(p: ExerciseProps) {
     case 'num_digits_to_word':
     case 'num_arith':
     case 'seq_neighbor_type':
+    case 'verb_pronoun_type':
       return <TypeView {...(p as ExerciseProps<TypeExercise>)} />
     case 'sentence_build':
+    case 'verb_sentence_build':
       return <SentenceView {...(p as ExerciseProps<SentenceExercise>)} />
     case 'article':
       return <ArticleView {...(p as ExerciseProps<ArticleExercise>)} />
@@ -448,6 +486,8 @@ export function ExerciseView(p: ExerciseProps) {
       return <VerbFormsView {...(p as ExerciseProps<VerbFormsExercise>)} />
     case 'separable':
       return <SeparableView {...(p as ExerciseProps<SeparableExercise>)} />
+    case 'verb_dropdown':
+      return <DropdownView {...(p as ExerciseProps<ChoiceExercise>)} />
     case 'seq_order':
       return <SequenceView {...(p as ExerciseProps<SequenceExercise>)} />
   }

@@ -1,16 +1,51 @@
 # DECISIONS
 
-1. **Config**: L2 = English, L1 = Romanian, UI = Romanian (all strings in `src/i18n/ro.ts`). Learners: general (kids 8–14 and adults) — friendly, large tap targets.
-2. **App name / mascot**: "Lexi Path"; original mascot "Lexi" (a small amber blob-fox, inline SVG). No third-party assets, sounds synthesized with WebAudio.
-3. **Routing**: HashRouter (static hosting + offline PWA without server rewrites).
-4. **State**: no global store lib; Dexie `useLiveQuery` for reads, small React context for the active profile.
-5. **SRS**: simplified SM-2 + level gating. `strength` is computed from `dueAt`/`interval` at read time (never stored as truth), a stored value is kept for sorting convenience only.
-6. **Level-up rule**: a level rises when `levelCredit` (weighted correct answers since last level change) ≥ threshold(level) AND those credits were earned across ≥2 distinct sessions (session = lesson id, and ≥2 distinct calendar days is required for level 4→5, guaranteeing Mastered cannot occur within one day).
-7. **Level-appropriate exercises**: words at level L get exercise types of the band (0–1 recognition, 2–3 reverse recall, 4–5 production); if the data lacks required fields (no example), fall back within the band, then to the nearest band.
-8. **Hearts**: OFF by default; when on: 5 max, 1 refills / 20 min, or a review lesson refills fully.
-9. **Streak freeze**: 1 earned per 7-day streak milestone, max 2 held; auto-consumed on a missed day.
-10. **Unit crowns**: avg level-weighted mastery of unit words: ≥25% bronze, ≥50% silver, ≥80% gold (avg of level/5).
-11. **Unit unlocking**: unit N+1 unlocks when unit N has ≥ bronze crown (or any word-learning done on it ≥ 80% seen).
-12. **Speaking**: shown only when `SpeechRecognition` exists and setting enabled; otherwise skipped.
-13. **Import separators**: auto-detected per-file by majority; ` - ` and ` = ` treated as separators only when surrounded by spaces (to keep hyphenated words). Comma-separated alternatives not supported (use `|`).
-14. **Unit size**: 8–10 words; chosen so no unit is smaller than 8 unless the deck itself is.
+Choices made without asking (the brief said: pick the simplest reasonable option and log it).
+
+## Base app
+1. **Name / mascot**: "Lexi Path"; original inline-SVG mascot; sounds synthesized with WebAudio; no third-party assets.
+2. **Routing/state**: HashRouter (static hosting, offline). Dexie `useLiveQuery` for reads, one small React context for the profile.
+3. **SRS**: simplified SM-2 + level gating. `strength` is derived from `dueAt`/`interval`; the stored value is only a cache.
+4. **First exposure** (0→1) needs no session spread (it only means "seen"); every later level needs ≥ 2 sessions; 4→5 needs ≥ 2 calendar days.
+5. **Hearts** OFF by default; 5 max, +1 per 20 min, or a review lesson refills. **Streak freeze**: 1 per 7-day streak, max 2.
+6. **Crowns** (units): average mastery ≥ 0.30 bronze, ≥ 0.60 silver, ≥ 0.85 gold. Unit N+1 unlocks when ≥ 80% of unit N was seen.
+7. **Match exercise** credits only the target word (companions are filler); mistakes on the target's pair count against it.
+
+## German extension
+8. **L2 = German (de-DE), L1 = Romanian**; English decks stay supported (`deck.l2`), with the old 4-column import format.
+9. **Nouns are stored with their article** in `term` ("das Mädchen"); the plural is stored bare ("Mädchen") and shown with "die".
+10. **Sub-skills**: top-level progress fields ARE the `meaning` skill (so v1 progress migrates by construction); `gender`, `plural`, `forms`
+    live in `skills`. Word level = min(meaning, requiredSkill + 2). Words with no required sub-skills are unaffected.
+11. **Unit sizes**: lessons ≤ 12 words stay whole; larger ones split 8–10 (7 in the few sizes where 8–10 is impossible, e.g. 21).
+    Group tags (`0-10`, `Monate`, any tag with spaces …) give one unit per group.
+12. **Typo rule**: ≤ 1 edit on words > 4 chars, never when the result is another word of the course (lexicon rule), never when it only
+    drops an umlaut. Cousin/Cousine is graded as a gender error (meaning false, gender failed), not as a typo.
+13. **Weekdays/months/seasons** are one generic "ordered set" mechanism (tags `wochentage`/`monate`/`jahreszeiten`): sequence, next/previous,
+    am/im fill-in, month↔season, listening, one info card. "Drag into order" is implemented as **tap to place / tap to remove**
+    (more reliable on phones than drag-and-drop).
+14. **Numbers**: `n=<int>` tag; German number words generated for 0–100; digits are accepted as an equivalent answer; a wrong 21–40 word is
+    retried as "digits → type the word", inserted before any other pending exercise of that word, with an ein + und + zwanzig breakdown.
+15. **Family**: `(Pl.)` nouns need `gender` only (meaning + article), never plural drills. Umlaut plurals are drilled ~2× as often.
+16. **Test lecție**: counts every direction as one point; a sequence extra counts as one point; a present-tense verb counts as one point
+    (≥ 5/6 persons). Failed words get `dueAt = now` on every sub-skill. Passing mark for "Verificată ✓" is ≥ 90%.
+17. **Deploy**: Vite `base` = `VITE_BASE` or `./` (relative, works under any sub-path with the hash router). PNG icons are generated from the SVG.
+    The service worker precaches the whole shell. Reminder: backup older than 7 days (installation date counts if no backup yet), snoozed for a day.
+
+## Verbs (Präsens)
+18. **Model**: `verb.present` is a 6-tuple; `present3sg` derives from index 2. Irregularity = table differs from stem + -e/-st/-t/-en/-t/-en
+    (with e-insertion after d/t). Multi-word tags are group labels; machine tags (`n=21`, `0-10`) may still be space separated.
+19. **Per person SRS**: `WordProgress.persons[6]`; forms level = floor(mean of the 6 person levels); word strength = min(meaning, mean person strength).
+20. **Conjugare** stage state is `conj.passed[3]` (date of first pass). Stage k opens only on a day after stage k-1 was passed; a stage cannot be
+    recorded twice. Pass = ≥ 5/6 persons right on their first attempt (stage 2 has two rows per person: both must be right). Wrong rows repeat at the end.
+    The node tier = stages passed, capped at silver while any person is < 60%.
+21. **Sentence building from Romanian** needs a Romanian translation per sentence. The brief's seed text has none, so translations for the 20
+    seed sentences live in `VERB_SENTENCE_RO` and are attached on seeding (`Word.exampleRo`); user imports get the other exercises.
+22. **Stage 2 sentences**: the example sentences only cover a couple of persons, so a sentence is rewritten for the asked person
+    (Subject + Verb + rest) when possible; otherwise a "pronoun ___ (verb)" row is used.
+23. **Peeking at the card** costs 2 XP per peek (levels 0–2); the card opens automatically the first time a level-0 verb appears; hidden at level 3+ and in tests.
+24. **Dexie**: v2 adds `tests` and sub-skill containers; v3 adds optional `persons`/`conj` (no schema change). Both keep all existing rows (covered by tests).
+
+## Known limitations / not verified
+* Speech recognition, TTS voices and the iPhone behaviour were not exercised in a real device here (only headless Chromium with speech stubbed).
+* The GitHub Pages workflow was written but not run (no repository was available); `npm run build` with a custom `VITE_BASE` was not exercised either.
+* Unit tests (243) cover `src/core` at ~94% statements (srs.ts ~97%); screens are covered only by 4 Playwright flows.

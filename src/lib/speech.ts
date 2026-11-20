@@ -100,3 +100,33 @@ export function listen(lang: SpeechLang = 'de-DE'): Promise<string[]> {
     }
   })
 }
+
+/** Reads `before`, plays `beep()` for the blank, then reads `after`. */
+export function speakWithBeep(before: string, after: string, beep: () => void, opts: { voice?: string | null; rate?: number; lang?: SpeechLang } = {}): void {
+  if (!ttsSupported()) {
+    beep()
+    return
+  }
+  const synth = window.speechSynthesis
+  synth.cancel()
+  const lang = opts.lang ?? 'de-DE'
+  const mk = (text: string): SpeechSynthesisUtterance => {
+    const u = new SpeechSynthesisUtterance(text)
+    u.lang = lang
+    u.rate = opts.rate ?? 0.9
+    const v = pickVoice(synth.getVoices(), lang, opts.voice)
+    if (v) u.voice = v
+    return u
+  }
+  const second = (): void => {
+    beep()
+    setTimeout(() => {
+      if (after.trim()) synth.speak(mk(after))
+    }, 250)
+  }
+  if (before.trim()) {
+    const u = mk(before)
+    u.onend = second
+    synth.speak(u)
+  } else second()
+}

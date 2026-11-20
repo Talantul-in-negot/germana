@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { Fragment, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   editRow, parseJsonWords, parseWordList, rowToInput, rowsFromJson, type JsonWordInput, type Lang, type ParsedRow, type RowEdit, type RowIssue, type RowWarning,
@@ -7,6 +7,7 @@ import {
 import { assignUnitsFor } from '../core/units'
 import type { Cefr, WordType } from '../core/types'
 import { Term } from '../components/Term'
+import { PERSONS } from '../core/conjugation'
 import { db } from '../data/db'
 import { addWords, createDeck, lessonFromName, setMeta } from '../data/repo'
 import { t, type Key } from '../i18n'
@@ -24,6 +25,7 @@ export default function Import() {
   const [lessonNo, setLessonNo] = useState('')
   const [lang, setLang] = useState<Lang>('de')
   const [edits, setEdits] = useState<Record<number, RowEdit>>({})
+  const [drafts, setDrafts] = useState<Record<number, string[]>>({})
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -83,6 +85,12 @@ export default function Import() {
   }
 
   const german = effLang === 'de' && !json
+  const setPerson = (r: ParsedRow, i: number, v: string) => {
+    const cur = drafts[r.line] ?? (r.verb?.present ? [...r.verb.present] : ['', '', '', '', '', ''])
+    const next = cur.map((x, j) => (j === i ? v : x))
+    setDrafts((d) => ({ ...d, [r.line]: next }))
+    if (next.every((x) => x.trim())) edit(r, { forms: `P: ${next.map((x) => x.trim()).join(', ')}` })
+  }
 
   return (
     <div>
@@ -135,7 +143,8 @@ export default function Import() {
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.line} className={r.valid ? (r.warnings.length ? 'bg-amber-50' : '') : 'bg-bad-soft'} data-testid="preview-row">
+                  <Fragment key={r.line}>
+                  <tr className={r.valid ? (r.warnings.length ? 'bg-amber-50' : '') : 'bg-bad-soft'} data-testid="preview-row">
                     <td className="p-2 text-slate-400">{r.line}</td>
                     <td className="p-2 font-bold">
                       {german ? (
@@ -176,6 +185,27 @@ export default function Import() {
                       {r.warnings.map((w: RowWarning) => <div key={w} className="text-amber-700" data-testid={`warn-${w}`}>{t(`import.warn.${w}` as Key)}</div>)}
                     </td>
                   </tr>
+                  {german && r.verb?.present && (
+                    <tr className="bg-slate-50" data-testid="present-table">
+                      <td />
+                      <td colSpan={7} className="p-2">
+                        <div className="mb-1 flex items-center gap-2 text-xs font-bold text-slate-500">
+                          Präsens
+                          {r.verb.irregular && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800" data-testid="irregular-flag">neregulat</span>}
+                        </div>
+                        <ul className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3">
+                          {PERSONS.map((p, i) => (
+                            <li key={p} className="flex items-center gap-1 text-xs">
+                              <span className="w-16 text-slate-500">{p}</span>
+                              <input className="w-24 rounded-lg border border-slate-200 px-1 py-0.5 font-bold" aria-label={`${r.term} ${p}`} value={drafts[r.line]?.[i] ?? r.verb?.present?.[i] ?? ''}
+                                onChange={(e) => setPerson(r, i, e.target.value)} />
+                            </li>
+                          ))}
+                        </ul>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

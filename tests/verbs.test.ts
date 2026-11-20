@@ -335,7 +335,7 @@ describe('per-person progress', () => {
     expect(p.level).toBe(0) // meaning untouched
   })
   it('forms level is the (rounded down) average of the 6 persons and caps the verb level', () => {
-    let p = { ...base(), level: 5 as const }
+    let p: WordProgress = { ...base(), level: 5 }
     expect(effectiveLevel(p)).toBe(2) // forms 0 + margin
     for (let person = 0; person < 6; person++) for (let s = 0; s < 12; s++) p = ans(p, person, { sessionId: `a${person}x${s}`, now: T0 + s * 1000 })
     expect(formsLevel(p)).toBe(4)
