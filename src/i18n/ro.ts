@@ -1,6 +1,7 @@
 /** All UI strings (Romanian). To add a language: copy this file and switch the export in `index.ts`. */
 export const ro = {
   'app.name': 'Lexi Path',
+  'app.title': 'WortPfad',
   'app.loading': 'Se încarcă…',
   'nav.path': 'Calea',
   'nav.decks': 'Pachete',
