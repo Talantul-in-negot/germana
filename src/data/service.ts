@@ -6,7 +6,7 @@ import {
 import { uid } from '../core/id'
 import type { LessonMode, LessonResultItem } from '../core/lesson'
 import { applySkillAnswer, dayKey, dueNow, effectiveLevel, requiredSkills } from '../core/srs'
-import type { Level, Profile, SessionLog, TestResult, TestWordResult, Word } from '../core/types'
+import type { Level, Profile, SessionLog, TestExtra, TestResult, TestWordResult, Word } from '../core/types'
 import { db } from './db'
 import { progressOrNew } from './repo'
 
@@ -172,12 +172,13 @@ export interface FinishTestInput {
   profileId: string
   deckId: string
   words: TestWordResult[]
+  extras?: TestExtra[]
   now: number
 }
 
-export function scoreTest(words: readonly TestWordResult[]): { correct: number; total: number; score: number } {
-  let correct = 0
-  let total = 0
+export function scoreTest(words: readonly TestWordResult[], extras: readonly TestExtra[] = []): { correct: number; total: number; score: number } {
+  let correct = extras.filter((x) => x.ok).length
+  let total = extras.length
   for (const w of words) {
     for (const d of [w.deToRo, w.roToDe, w.context]) {
       if (!d) continue
@@ -207,10 +208,11 @@ export function groupScores(words: readonly TestWordResult[]): { group: string; 
 /** Saves the attempt in the lesson's history; failed words come back in the next sessions. */
 export async function finishTest(input: FinishTestInput): Promise<TestResult> {
   return db.transaction('rw', [db.tests, db.progress], async () => {
-    const { correct, total, score } = scoreTest(input.words)
+    const { correct, total, score } = scoreTest(input.words, input.extras ?? [])
     const result: TestResult = {
       id: uid(), profileId: input.profileId, deckId: input.deckId, ts: input.now, date: dayKey(input.now),
       score, total, correct, words: input.words, verified: score >= VERIFIED_AT,
+      ...(input.extras?.length ? { extras: input.extras } : {}),
     }
     await db.tests.add(result)
     const failed = input.words.filter((w) => [w.deToRo, w.roToDe, w.context].some((d) => d && !d.ok))

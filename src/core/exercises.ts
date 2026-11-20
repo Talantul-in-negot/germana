@@ -1,7 +1,7 @@
 /** Exercise generation + evaluation from a deck. Pure. */
 import { checkAnswer, checkRomanian, fold, normalize, type CheckResult } from './answer'
 import { checkDigits, checkGermanAnswer, type DeNote, type DeTarget } from './answerDe'
-import { splitArticle, splitDialogue } from './german'
+import { MONTHS, SEASONS, SEASON_OF_MONTH, seqOf, splitArticle, splitDialogue, type SeqSet } from './german'
 import { shuffle } from './id'
 import { allNumberWords, isCompoundNumber, numberBreakdown, numberDistractors, numberToGerman, type NumPart } from './numbers'
 import { BAND_TYPES, bandForLevel, requiredSkills, type Band } from './srs'
@@ -13,7 +13,7 @@ interface Base {
 }
 
 export interface ChoiceExercise extends Base {
-  type: 'mc_l2_l1' | 'mc_l1_l2' | 'listen_choose' | 'fill_blank' | 'plural_choice' | 'context_choice' | 'context_listen' | 'num_word_to_digits'
+  type: 'mc_l2_l1' | 'mc_l1_l2' | 'listen_choose' | 'fill_blank' | 'plural_choice' | 'context_choice' | 'context_listen' | 'num_word_to_digits' | 'seq_neighbor' | 'fill_prep' | 'listen_ro' | 'month_season' | 'season_months' | 'collective' | 'possessive'
   prompt: string
   /** sentence with the word masked (fill_blank / context) */
   sentence?: string
@@ -28,13 +28,13 @@ export interface ChoiceExercise extends Base {
 }
 
 export interface MatchExercise extends Base {
-  type: 'match' | 'match_qa'
+  type: 'match' | 'match_qa' | 'gender_pairs'
   /** `wordId` of each pair; the exercise's own wordId is the target */
   pairs: { wordId: string; left: string; right: string }[]
 }
 
 export interface TypeExercise extends Base {
-  type: 'type_l1_l2' | 'type_l2_l1' | 'listen_type' | 'speak' | 'plural_type' | 'num_listen_digits' | 'num_digits_to_word' | 'num_arith'
+  type: 'type_l1_l2' | 'type_l2_l1' | 'listen_type' | 'speak' | 'plural_type' | 'num_listen_digits' | 'num_digits_to_word' | 'num_arith' | 'seq_neighbor_type'
   prompt: string
   accepted: string[]
   speak?: string
@@ -42,6 +42,8 @@ export interface TypeExercise extends Base {
   de?: DeTarget & { ignoreArticle?: boolean }
   /** Romanian answer: accepted with/without definite article */
   ro?: { translations: string[] }
+  /** Romanian words of the course (a typo must not produce another one: iunie/iulie) */
+  roLexicon?: string[]
   /** accepted digits (number listening) */
   digits?: number
   lexicon?: string[]
@@ -84,7 +86,20 @@ export interface SeparableExercise extends Base {
   skill: 'forms'
 }
 
-export type Exercise = ChoiceExercise | MatchExercise | TypeExercise | SentenceExercise | ArticleExercise | VerbFormsExercise | SeparableExercise
+export interface SequenceExercise extends Base {
+  type: 'seq_order'
+  /** which set (wochentage / monate / jahreszeiten) */
+  set: string
+  /** the set in order (Montag first) */
+  days: string[]
+  /** shown names per slot; null = the learner fills this slot */
+  given: (string | null)[]
+  /** shuffled words to place */
+  bank: string[]
+}
+
+export type Exercise =
+  | ChoiceExercise | MatchExercise | TypeExercise | SentenceExercise | ArticleExercise | VerbFormsExercise | SeparableExercise | SequenceExercise
 
 export interface BuildContext {
   /** all words of the deck (for distractors / pairs) */
@@ -93,6 +108,8 @@ export interface BuildContext {
   newId: () => string
   /** number words the learner has already seen (mini-arithmetic) */
   seenNumbers?: Word[]
+  /** effective level of the target word (partial vs full sequence) */
+  level?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -144,12 +161,81 @@ export function maskTerm(sentence: string, term: string, blank = '_____'): strin
   return re.test(sentence) ? sentence.replace(re, blank) : null
 }
 
-/** "Wo wohnst du? – In Timișoara." with the word blanked in the question part. */
+/**
+ * "Wo wohnst du? – In Timișoara." with the word blanked in the question part. Months/weekdays blank
+ * the noun in the answer ("Wann hast du Geburtstag? – Im ___."); words of type `other`
+ * (heute/morgen/gestern …) without a dialogue blank the word inside the whole example sentence.
+ */
 export function contextOf(w: Word): { sentence: string; question: string; answer: string } | null {
   const d = splitDialogue(w.example)
-  if (!d) return null
-  const masked = maskTerm(d.question, w.term, '___')
-  return masked ? { sentence: `${masked} – ${d.answer}`, question: d.question, answer: d.answer } : null
+  if (d) {
+    const masked = maskTerm(d.question, w.term, '___')
+    if (masked) return { sentence: `${masked} – ${d.answer}`, question: d.question, answer: d.answer }
+    if (seqOf(w) || isFamilyWord(w)) {
+      const am = maskTerm(d.answer, splitArticle(w.term).rest, '___')
+      if (am) return { sentence: `${d.question} – ${am}`, question: d.question, answer: d.answer }
+    }
+    return null
+  }
+  if (w.type === 'other' && w.example) {
+    const masked = maskTerm(w.example, w.term, '___')
+    return masked ? { sentence: masked, question: w.example, answer: '' } : null
+  }
+  return null
+}
+
+const FAMILY_TAGS = ['kernfamilie', 'verwandte']
+export const isFamilyWord = (w: Word): boolean => (w.tags ?? []).some((t) => FAMILY_TAGS.includes(t))
+
+/** Male <-> female partners (bare names; Opa/Oma are variants of Großvater/Großmutter). */
+export const FAMILY_PAIRS: readonly (readonly [string, string])[] = [
+  ['Bruder', 'Schwester'], ['Sohn', 'Tochter'], ['Onkel', 'Tante'], ['Cousin', 'Cousine'], ['Vater', 'Mutter'], ['Opa', 'Oma'],
+]
+/** Collective words and the members they are made of. */
+export const COLLECTIVES: readonly { word: string; parts: readonly [string, string] }[] = [
+  { word: 'Eltern', parts: ['Mutter', 'Vater'] },
+  { word: 'Geschwister', parts: ['Bruder', 'Schwester'] },
+  { word: 'Kinder', parts: ['Tochter', 'Sohn'] },
+  { word: 'Großeltern', parts: ['Oma', 'Opa'] },
+]
+
+const variantsOf = (w: Word): string[] => [w.term, ...(w.alternatives ?? [])].map((t) => splitArticle(t).rest.toLowerCase())
+
+/** The male/female partner of a family word that is present in the deck. */
+export function partnerOf(w: Word, deckWords: Word[]): Word | null {
+  const mine = variantsOf(w)
+  for (const [m, f] of FAMILY_PAIRS) {
+    const side = mine.includes(m.toLowerCase()) ? f : mine.includes(f.toLowerCase()) ? m : null
+    if (!side) continue
+    const p = deckWords.find((x) => x.id !== w.id && variantsOf(x).includes(side.toLowerCase()))
+    if (p) return p
+  }
+  return null
+}
+
+export const hasDialogue = (w: Word): boolean => !!splitDialogue(w.example) && !!contextOf(w)
+
+/** Words of an ordered set found in a deck, one per position, in order. */
+export function setWordsOf(words: Word[], set: SeqSet): Word[] {
+  const byIdx = new Map<number, Word>()
+  for (const w of words) {
+    const s = seqOf(w)
+    if (s && s.set.tag === set.tag && !byIdx.has(s.index)) byIdx.set(s.index, w)
+  }
+  return [...byIdx.entries()].sort((a, b) => a[0] - b[0]).map(([, w]) => w)
+}
+
+export const isSetComplete = (words: Word[], set: SeqSet): boolean => setWordsOf(words, set).length === set.names.length
+
+const bareOf = (w: Word): string => splitArticle(w.term).rest
+
+/** "Am Montag habe ich Schule." -> "___ Montag habe ich Schule." (answer: am / im) */
+export function maskPrep(w: Word): string | null {
+  const info = seqOf(w)
+  if (!info || !w.example) return null
+  const names = [w.term, ...(w.alternatives ?? [])].map((t) => escapeRe(splitArticle(t).rest))
+  const re = new RegExp(`(?<![\\p{L}])(am|im)(?=\\s+(?:${names.join('|')})(?![\\p{L}]))`, 'iu')
+  return re.test(w.example) ? w.example.replace(re, '___') : null
 }
 
 function separableParts(w: Word): { parts: [string, string, string]; answers: [string, string] } | null {
@@ -172,7 +258,7 @@ function separableParts(w: Word): { parts: [string, string, string]; answers: [s
 }
 
 export function availableTypes(w: Word, deckSize: number, speakEnabled: boolean): Set<ExerciseType> {
-  const s = new Set<ExerciseType>(['mc_l2_l1', 'mc_l1_l2', 'listen_choose', 'type_l1_l2', 'listen_type'])
+  const s = new Set<ExerciseType>(['mc_l2_l1', 'mc_l1_l2', 'listen_choose', 'listen_ro', 'type_l1_l2', 'listen_type'])
   if (deckSize >= 3) s.add('match')
   if (hasMaskableExample(w) && deckSize >= 3) s.add('fill_blank')
   if (hasSentence(w)) s.add('sentence_build')
@@ -180,7 +266,7 @@ export function availableTypes(w: Word, deckSize: number, speakEnabled: boolean)
   if (deckSize >= 4 && contextOf(w)) {
     s.add('context_choice')
     s.add('context_listen')
-    s.add('match_qa')
+    if (hasDialogue(w) && !seqOf(w)) s.add('match_qa')
   }
   return s
 }
@@ -216,6 +302,14 @@ export interface PlanInfo {
   level: number
   skillLevels: Partial<Record<SubSkill, number>>
   seenNumbers: Word[]
+  /** ordered sets (by tag) that are complete in this deck: sequence / next-previous possible */
+  completeSets?: string[]
+  /** the deck has the seasons (month -> season exercises) */
+  hasSeasons?: boolean
+  /** the deck has male/female family pairs (gender pairs) */
+  hasPairs?: boolean
+  /** the deck has collective words (Eltern, Geschwister …) */
+  collectives?: boolean
 }
 
 /** Like `chooseType`, but also schedules sub-skill drills (article / plural / forms) and number exercises. */
@@ -230,6 +324,31 @@ export function chooseTypeFor(
     const pool = fresh.length ? fresh : list
     return pool[Math.floor(ctx.rng() * pool.length)] as ExerciseType
   }
+  const seq = seqOf(w)
+  if (seq) {
+    const band = bandForLevel(info.level)
+    const full = (info.completeSets ?? []).includes(seq.set.tag)
+    const prep = maskPrep(w) !== null
+    const seasons = seq.set.tag === 'monate' && info.hasSeasons === true
+    const months = seq.set.tag === 'jahreszeiten'
+    if (band === 'recognition') return pick(['listen_ro', 'mc_l2_l1', 'listen_choose'])
+    if (band === 'recall') {
+      return pick([
+        ...(full ? (['seq_neighbor', 'seq_order'] as const) : []), ...(prep ? (['fill_prep'] as const) : []),
+        ...(seasons ? (['month_season'] as const) : []), ...(months ? (['season_months'] as const) : []), 'mc_l1_l2',
+      ])
+    }
+    return pick([
+      ...(full ? (['seq_neighbor_type', 'seq_order'] as const) : []), ...(prep ? (['fill_prep'] as const) : []),
+      ...(seasons ? (['month_season'] as const) : []), 'type_l1_l2',
+    ])
+  }
+  if (isFamilyWord(w) && info.level >= 1) {
+    const r = ctx.rng()
+    if (info.hasPairs && r < 0.25) return 'gender_pairs'
+    if (info.collectives && COLLECTIVES.some((c) => c.word === splitArticle(w.term).rest) && r < 0.5) return 'collective'
+    if (w.gender && r < 0.4) return 'possessive'
+  }
   if (w.value !== undefined) {
     const band = bandForLevel(info.level)
     if (band === 'recognition') return pick(['num_word_to_digits', 'mc_l2_l1'])
@@ -239,13 +358,18 @@ export function chooseTypeFor(
   if (info.level >= 1) {
     const req = requiredSkills(w)
     if (req.includes('gender') && ctx.rng() < 0.4) return 'article'
-    if (req.includes('plural') && ctx.rng() < 0.3) return (info.skillLevels.plural ?? 0) <= 1 ? 'plural_choice' : 'plural_type'
+    if (req.includes('plural') && ctx.rng() < (isUmlautPlural(w) ? 0.65 : 0.3)) return (info.skillLevels.plural ?? 0) <= 1 ? 'plural_choice' : 'plural_type'
     if (req.includes('forms')) {
       if (separableParts(w) && ctx.rng() < 0.4) return 'separable'
       if (ctx.rng() < 0.5) return 'verb_forms'
     }
   }
   return chooseType(w, info.level, ctx, lastType)
+}
+
+/** Mütter, Väter, Brüder, Söhne …: the plural adds an umlaut the singular lacks. */
+export function isUmlautPlural(w: Word): boolean {
+  return !!w.plural && !w.pluralOnly && /[äöü]/i.test(w.plural) && !/[äöü]/i.test(splitArticle(w.term).rest)
 }
 
 const primary = (w: Word): string => w.translations[0] ?? ''
@@ -358,7 +482,10 @@ export function buildExercise(w: Word, type: ExerciseType, ctx: BuildContext): E
       return ex
     }
     case 'type_l2_l1':
-      return { ...base, type, prompt: w.term, accepted: w.translations, ro: { translations: w.translations }, speak: w.term }
+      return {
+        ...base, type, prompt: w.term, accepted: w.translations, ro: { translations: w.translations }, speak: w.term,
+        roLexicon: deckWords.flatMap((x) => x.translations),
+      }
     case 'listen_type': {
       const ex: TypeExercise = { ...base, type, prompt: '', accepted: [w.term], speak: w.term }
       if (isDe) {
@@ -380,20 +507,21 @@ export function buildExercise(w: Word, type: ExerciseType, ctx: BuildContext): E
       return { ...base, type, prompt: `${w.term} = ${primary(w)}`, solution, bank, speak: w.example }
     }
     case 'article': {
-      if (!w.gender || w.pluralOnly) return buildExercise(w, 'mc_l1_l2', ctx)
+      if (!w.gender) return buildExercise(w, 'mc_l1_l2', ctx)
       return { ...base, type, noun: splitArticle(w.term).rest, answer: w.gender, translation: primary(w), speak: w.term, skill: 'gender' }
     }
     case 'plural_type': {
       if (!w.plural) return buildExercise(w, 'mc_l1_l2', ctx)
       return {
         ...base, type, prompt: w.term, accepted: [w.plural], speak: w.term, skill: 'plural',
-        de: { term: w.plural, ignoreArticle: true }, lexicon: lexicon ?? [],
+        de: { term: w.plural, ignoreArticle: true, ...(w.pluralAlternatives?.length ? { alternatives: w.pluralAlternatives } : {}) }, lexicon: lexicon ?? [],
       }
     }
     case 'plural_choice': {
       if (!w.plural) return buildExercise(w, 'mc_l1_l2', ctx)
       const bare = splitArticle(w.term).rest
-      return choice({ ...base, type, prompt: w.term, skill: 'plural', speak: w.term }, w.plural, pluralVariants(bare, w.plural, rng), rng)
+      const alts = new Set(w.pluralAlternatives ?? [])
+      return choice({ ...base, type, prompt: w.term, skill: 'plural', speak: w.term }, w.plural, pluralVariants(bare, w.plural, rng).filter((x) => !alts.has(x)), rng)
     }
     case 'verb_forms': {
       const v = w.verb
@@ -414,8 +542,9 @@ export function buildExercise(w: Word, type: ExerciseType, ctx: BuildContext): E
       if (!c) return buildExercise(w, 'mc_l1_l2', ctx)
       const withCtx = deckWords.filter((x) => x.id !== w.id && contextOf(x))
       const rest = deckWords.filter((x) => x.id !== w.id && !contextOf(x) && x.type !== 'noun')
-      const pool = [...shuffle(withCtx, rng), ...shuffle(rest, rng)]
-      const bare = (t: string): string => t.replace(/[?!.]+$/, '')
+      const sameGender = (x: Word): number => (isFamilyWord(w) && x.gender === w.gender ? 0 : 1)
+      const pool = [...shuffle(withCtx, rng).sort((a, b) => sameGender(a) - sameGender(b)), ...shuffle(rest, rng)]
+      const bare = (t: string): string => splitArticle(t).rest.replace(/[?!.]+$/, '')
       const wrong = distractors(w, pool, 3, () => 0.5, (x) => [x.term]).map((x) => bare(x.term))
       return choice({ ...base, type, prompt: primary(w), sentence: c.sentence, speak: c.question }, bare(w.term), wrong, rng)
     }
@@ -426,6 +555,106 @@ export function buildExercise(w: Word, type: ExerciseType, ctx: BuildContext): E
       const pool = [...shuffle(withCtx, rng), ...shuffle(deckWords.filter((x) => x.id !== w.id && !contextOf(x)), rng)]
       const wrong = distractors(w, pool, 3, () => 0.5, (x) => x.translations).map(primary)
       return choice({ ...base, type, prompt: '', sentence: c.sentence, speak: c.question }, pickTranslation(w, rng), wrong, rng)
+    }
+    // ---- family ----
+    case 'gender_pairs': {
+      const mate = partnerOf(w, deckWords)
+      if (!mate) return buildExercise(w, 'mc_l2_l1', ctx)
+      const male = (x: Word): boolean => x.gender === 'der'
+      const mk = (a: Word, b: Word, id: string): { wordId: string; left: string; right: string } =>
+        male(a) ? { wordId: id, left: a.term, right: b.term } : { wordId: id, left: b.term, right: a.term }
+      const pairs = [mk(w, mate, w.id)]
+      const used = new Set([w.id, mate.id])
+      for (const x of shuffle(deckWords, rng)) {
+        if (pairs.length >= 4) break
+        if (used.has(x.id) || !isFamilyWord(x)) continue
+        const m = partnerOf(x, deckWords)
+        if (!m || used.has(m.id)) continue
+        used.add(x.id)
+        used.add(m.id)
+        pairs.push(mk(x, m, male(x) ? x.id : m.id))
+      }
+      if (pairs.length < 3) return buildExercise(w, 'mc_l2_l1', ctx)
+      return { ...base, type, pairs: shuffle(pairs, rng) }
+    }
+    case 'collective': {
+      const bare = splitArticle(w.term).rest
+      const c = COLLECTIVES.find((x) => x.word === bare)
+      if (!c) return buildExercise(w, 'mc_l2_l1', ctx)
+      const others = shuffle(deckWords.filter((x) => x.id !== w.id && COLLECTIVES.some((y) => y.word === splitArticle(x.term).rest)), rng)
+      return choice({ ...base, type, prompt: `${c.parts[0]} + ${c.parts[1]} = ?` }, w.term, others.slice(0, 3).map((x) => x.term), rng)
+    }
+    case 'possessive': {
+      if (!w.gender) return buildExercise(w, 'mc_l1_l2', ctx)
+      const feminine = w.gender === 'die'
+      const correct = feminine ? 'meine' : 'mein'
+      const wrong = (feminine ? ['mein', 'deine', 'dein'] : ['meine', 'dein', 'deine'])
+      return choice({ ...base, type, prompt: `___ ${splitArticle(w.term).rest}`, skill: 'gender', speak: w.term }, correct, wrong, rng)
+    }
+    // ---- ordered sets: weekdays, months, seasons ----
+    case 'listen_ro': {
+      const wrong = distractors(w, deckWords, 3, rng, (x) => x.translations).map(primary)
+      return choice({ ...base, type, prompt: '', speak: w.term }, pickTranslation(w, rng), wrong, rng)
+    }
+    case 'fill_prep': {
+      const masked = maskPrep(w)
+      const info = seqOf(w)
+      if (!masked || !info) return buildExercise(w, 'mc_l2_l1', ctx)
+      const wrongs = shuffle(['am', 'im', 'um', 'an', 'in'].filter((p) => p !== info.set.prep), rng).slice(0, 3)
+      return choice({ ...base, type, prompt: primary(w), sentence: masked, speak: w.example as string }, info.set.prep, wrongs, rng)
+    }
+    case 'seq_neighbor':
+    case 'seq_neighbor_type': {
+      const info = seqOf(w)
+      const set = info?.set
+      const items = set ? setWordsOf(deckWords, set) : []
+      if (!info || !set || items.length !== set.names.length) return buildExercise(w, 'mc_l1_l2', ctx)
+      const n = items.length
+      const noun = set.tag === 'wochentage' ? 'Tag' : set.tag === 'monate' ? 'Monat' : 'Jahreszeit'
+      const after = rng() < 0.5
+      const ref = items[(info.index + (after ? n - 1 : 1)) % n] as Word
+      const prompt = `Welche${noun === 'Jahreszeit' ? '' : 'r'} ${noun} kommt ${after ? 'nach' : 'vor'} ${bareOf(ref)}?`
+      if (type === 'seq_neighbor_type') {
+        return { ...base, type, prompt, accepted: [w.term], lexicon: lexicon ?? [], de: { ...deTarget(w), articleOptional: true } }
+      }
+      const wrong = shuffle(items.filter((d) => d.id !== w.id && d.id !== ref.id), rng).slice(0, 3).map(bareOf)
+      return choice({ ...base, type, prompt }, bareOf(w), wrong, rng)
+    }
+    case 'seq_order': {
+      const info = seqOf(w)
+      const set = info?.set
+      const items = set ? setWordsOf(deckWords, set) : []
+      if (!info || !set || items.length !== set.names.length) return buildExercise(w, 'mc_l2_l1', ctx)
+      const names = items.map(bareOf)
+      const partial = (ctx.level ?? 0) < 4
+      let missing = new Set(names.map((_, i) => i))
+      if (partial) {
+        const k = 3 + (rng() < 0.5 ? 1 : 0)
+        missing = new Set(shuffle(names.map((_, i) => i), rng).slice(0, k))
+        missing.add(info.index)
+      }
+      const expected = names.filter((_, i) => missing.has(i))
+      let bank = shuffle(expected, rng)
+      for (let i = 0; i < 5 && bank.length > 1 && bank.join() === expected.join(); i++) bank = shuffle(expected, rng)
+      return { ...base, type, set: set.tag, days: names, given: names.map((x, i) => (missing.has(i) ? null : x)), bank }
+    }
+    case 'month_season': {
+      const info = seqOf(w)
+      if (!info || info.set.tag !== 'monate') return buildExercise(w, 'mc_l2_l1', ctx)
+      const season = SEASONS[SEASON_OF_MONTH[info.index] as number] as string
+      const wrong = SEASONS.filter((x) => x !== season) as string[]
+      return choice({ ...base, type, prompt: `In welcher Jahreszeit ist ${w.term}?` }, season, wrong, rng)
+    }
+    case 'season_months': {
+      const info = seqOf(w)
+      if (!info || info.set.tag !== 'jahreszeiten') return buildExercise(w, 'mc_l2_l1', ctx)
+      const first = SEASON_OF_MONTH.findIndex((x) => x === info.index)
+      const triple = (start: number): string => [0, 1, 2].map((k) => MONTHS[(start + k) % 12]).join(', ')
+      // the season's own months, in calendar order (Winter = Dezember, Januar, Februar)
+      const own = info.index === 3 ? 11 : first
+      const correct = triple(own)
+      const wrong = [1, 2, 3, 11, 10].map((d) => triple((own + d) % 12)).filter((x) => x !== correct)
+      return choice({ ...base, type, prompt: `Welche drei Monate gehören zum ${bareOf(w)}?` }, correct, shuffle(wrong, rng).slice(0, 3), rng)
     }
     // ---- numbers ----
     case 'num_word_to_digits': {
@@ -527,10 +756,11 @@ export function evaluateTyped(ex: TypeExercise, input: string): Outcome {
     const mainSkill: SubSkill = ex.skill ?? 'meaning'
     credits.push({ skill: mainSkill, correct: c.meaning })
     if (!ex.skill && c.meaning && c.gender !== 'skip') credits.push({ skill: 'gender', correct: c.gender === 'ok' })
+    if (!c.meaning && c.gender === 'fail') credits.push({ skill: 'gender', correct: false })
     out.credits = credits
     return out
   }
-  if (ex.ro) return { ...fromCheck(checkRomanian(input, ex.ro.translations)), given: input }
+  if (ex.ro) return { ...fromCheck(checkRomanian(input, ex.ro.translations, ex.roLexicon ?? [])), given: input }
   return { ...fromCheck(checkAnswer(input, ex.accepted)), given: input }
 }
 
@@ -578,4 +808,11 @@ export function evaluateSeparable(ex: SeparableExercise, inputs: string[]): Outc
   const details = ex.answers.map((a, i) => checkGermanAnswer(inputs[i] ?? '', { term: a }).meaning)
   const ok = details.every(Boolean)
   return { correct: ok, expected: ex.answers.join(' … '), details, given: inputs.join(' … '), credits: [{ skill: 'forms', correct: ok }] }
+}
+
+/** Ordered-set sequence: every missing slot must hold the right name (all of them in order for the full version). */
+export function evaluateSequence(ex: SequenceExercise, filled: (string | null)[]): Outcome {
+  const expected = ex.days.filter((_, i) => ex.given[i] === null)
+  const ok = filled.length === expected.length && filled.every((x, i) => x === expected[i])
+  return { correct: ok, expected: ex.days.join(', '), given: filled.map((x) => x ?? '…').join(', ') }
 }

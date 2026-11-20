@@ -19,6 +19,8 @@ export interface DeTarget {
   alternatives?: string[]
   value?: number
   ignoreArticle?: boolean
+  /** the article may be left out without penalty (weekdays/months: "Montag") */
+  articleOptional?: boolean
 }
 
 export interface DeCheck {
@@ -100,7 +102,18 @@ export function checkGermanAnswer(input: string, target: DeTarget, lexicon: read
     const i = splitArticle(raw)
     const isNoun = t.article !== null
     const core = kindOf(i.article && isNoun ? i.rest : raw.replace(/^(der|die|das)\s+/i, (m) => (isNoun ? '' : m)), t.rest, lex, own)
-    if (core === null) continue
+    if (core === null) {
+      // another word of the course that differs only slightly AND carries another article
+      // (der Cousin / die Cousine): graded as a gender error, never as a typo
+      if (isNoun && i.article && i.article !== t.article) {
+        const k = cleanDe(i.rest).toLowerCase()
+        if (lex.has(k) && !own.has(k) && levenshtein(asciiDe(k), asciiDe(cleanDe(t.rest))) <= 2) {
+          const err: DeCheck = { verdict: 'wrong', meaning: false, gender: 'fail', notes: ['article_wrong'], expected: cand, quality: undefined }
+          if (best.verdict === 'wrong') best = err
+        }
+      }
+      continue
+    }
 
     const notes: DeNote[] = []
     let gender: DeCheck['gender'] = 'skip'
@@ -127,8 +140,10 @@ export function checkGermanAnswer(input: string, target: DeTarget, lexicon: read
         almost = true
       } else {
         gender = 'skip'
-        notes.push('article_missing')
-        almost = true
+        if (!target.articleOptional) {
+          notes.push('article_missing')
+          almost = true
+        }
       }
     }
     const quality: Quality | undefined = core === 'typo' ? 'typo' : core === 'translit' ? 'diacritics' : 'exact'

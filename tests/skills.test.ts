@@ -15,7 +15,7 @@ describe('required sub-skills', () => {
   it('nouns need gender (+ plural when known), verbs need forms', () => {
     expect(requiredSkills({ type: 'noun', gender: 'der', plural: 'Tische' })).toEqual(['gender', 'plural'])
     expect(requiredSkills({ type: 'noun', gender: 'die', plural: null })).toEqual(['gender'])
-    expect(requiredSkills({ type: 'noun', gender: 'die', pluralOnly: true, plural: 'Eltern' })).toEqual(['plural'])
+    expect(requiredSkills({ type: 'noun', gender: 'die', pluralOnly: true, plural: 'Eltern' })).toEqual(['gender'])
     expect(requiredSkills({ type: 'verb', verb: { present3sg: 'geht' } })).toEqual(['forms'])
     expect(requiredSkills({ type: 'verb', verb: {} })).toEqual([])
     expect(requiredSkills({ type: 'other' })).toEqual([])

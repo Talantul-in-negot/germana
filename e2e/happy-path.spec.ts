@@ -1,8 +1,21 @@
 import { expect, test, type Page } from '@playwright/test'
+
 const LINES = Array.from({ length: 50 }, (_, i) => `word${i} ; cuvânt${i}`)
 const demo = new Map(LINES.map((_, i) => [`word${i}`, [`cuvânt${i}`]]))
 
-/** Plays the open lesson to its end, answering matches correctly and others arbitrarily. */
+async function stubSpeech(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.speak = (u: SpeechSynthesisUtterance) => {
+        ;(window as unknown as { __spoken: string }).__spoken = u.text
+      }
+    }
+  })
+}
+
+const spokenText = (page: Page): Promise<string> => page.evaluate(() => (window as unknown as { __spoken?: string }).__spoken ?? '')
+
+/** Plays the open lesson to its end, answering matches correctly and others from what is shown or spoken. */
 async function playLesson(page: Page): Promise<void> {
   for (let step = 0; step < 150; step++) {
     if (await page.getByTestId('summary').isVisible()) return
@@ -15,18 +28,17 @@ async function playLesson(page: Page): Promise<void> {
       await page.waitForTimeout(400) // let the exercise transition finish
       continue
     }
+    const spoken = await spokenText(page)
+    const shown = await page.getByTestId('prompt').isVisible()
     const input = page.getByTestId('answer-input')
     if (await input.isVisible()) {
-      const spoken = await page.evaluate(() => (window as unknown as { __spoken?: string }).__spoken ?? '')
-      const shown = await page.getByTestId('prompt').isVisible()
       const prompt = shown ? ((await page.getByTestId('prompt').textContent()) ?? '').trim() : ''
       const answer = shown ? ([...demo.entries()].find(([, tr]) => tr[0] === prompt)?.[0] ?? 'zzz') : spoken
       await input.fill(answer)
       await check.click()
       continue
     }
-    const sentence = page.getByTestId('sentence-line')
-    if (await sentence.isVisible()) {
+    if (await page.getByTestId('sentence-line').isVisible()) {
       await page.locator('main button.choice').first().click()
       await check.click()
       continue
@@ -44,33 +56,39 @@ async function playLesson(page: Page): Promise<void> {
       }
       continue
     }
-    // multiple choice: pick the right option when the prompt tells us the answer
-    const spoken = await page.evaluate(() => (window as unknown as { __spoken?: string }).__spoken ?? '')
-    const shown = await page.getByTestId('prompt').isVisible()
+    // multiple choice: pick the right option when the prompt (or the spoken word) tells us the answer
     const prompt = shown ? ((await page.getByTestId('prompt').textContent()) ?? '').trim() : spoken
-    const want = !shown ? spoken : demo.has(prompt) ? (demo.get(prompt) as string[])[0] : [...demo.entries()].find(([, tr]) => tr[0] === prompt)?.[0]
-    const right = want ? choices.filter({ hasText: new RegExp('^[0-9]' + want + '$') }) : choices
-    await right.first().click()
+    const candidates = demo.has(prompt)
+      ? [(demo.get(prompt) as string[])[0] as string]
+      : [[...demo.entries()].find(([, tr]) => tr[0] === prompt)?.[0] ?? '', demo.get(spoken)?.[0] ?? '', spoken]
+    let target = choices
+    for (const c of candidates) {
+      if (!c) continue
+      const f = choices.filter({ hasText: new RegExp('^[0-9]' + c + '$') })
+      if ((await f.count()) > 0) {
+        target = f
+        break
+      }
+    }
+    await target.first().click()
     await check.click()
   }
   throw new Error('lesson did not finish')
 }
 
 test.setTimeout(120_000)
+
 test('import 50 lines -> 5 units; play a lesson; progress survives reload', async ({ page }) => {
-  await page.addInitScript(() => {
-    if ('speechSynthesis' in window) window.speechSynthesis.speak = (u: SpeechSynthesisUtterance) => { (window as unknown as { __spoken: string }).__spoken = u.text }
-  })
+  await stubSpeech(page)
   await page.goto('/')
   await expect(page.getByTestId('unit-0')).toBeVisible()
-  await expect(page.getByTestId('unit-2')).toBeVisible() // demo deck: 30 words -> 3 units
 
   // --- import 50 lines
   await page.getByRole('link', { name: 'Pachete' }).click()
+  await expect(page.getByTestId('deck-card')).toHaveCount(6) // the German demo lessons
   await page.getByTestId('new-deck').click()
   await page.getByTestId('deck-name').fill('Test 50')
-  const lines = Array.from({ length: 50 }, (_, i) => `word${i} ; cuvânt${i}`).join('\n')
-  await page.getByTestId('paste-box').fill(lines)
+  await page.getByTestId('paste-box').fill(LINES.join('\n'))
   await expect(page.getByTestId('preview')).toContainText('50 rânduri valide')
   await page.getByTestId('save-import').click()
   await expect(page.getByTestId('unit-4')).toBeVisible()
@@ -90,4 +108,58 @@ test('import 50 lines -> 5 units; play a lesson; progress survives reload', asyn
   await page.getByRole('link', { name: 'Progres' }).click()
   await expect(page.getByTestId('word-list').locator('li').first()).toBeVisible()
   await expect(page.getByTestId('mastered-pct')).toBeVisible()
+})
+
+test('German import preview, "Test lecție" with a saved report, install screen', async ({ page }) => {
+  await stubSpeech(page)
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Pachete' }).click()
+  await page.getByTestId('new-deck').click()
+  await page.getByTestId('deck-name').fill('Lektion 9 – Haus')
+  await page.getByTestId('deck-course').fill('Menschen A1')
+  await page.getByTestId('paste-box').fill('die Mutter, ¨- ; mama\ndas Haus, ¨-er ; casa\nder Tisch, -e ; masa')
+  await expect(page.getByTestId('preview')).toContainText('3 rânduri valide')
+  await expect(page.getByTestId('plural-input').first()).toHaveValue('Mütter')
+  await page.getByTestId('save-import').click()
+  await expect(page.getByTestId('unit-0')).toBeVisible()
+
+  // --- lesson test: every word DE->RO and RO->DE
+  await page.getByRole('link', { name: 'Pachete' }).click()
+  await page.locator('[data-testid="deck-card"]', { hasText: 'Lektion 9' }).getByTestId('test-btn').click()
+  await page.getByTestId('test-start').click()
+  const answers: Record<string, string> = { 'die Mutter': 'mama', mama: 'die Mutter', 'das Haus': 'casa', casa: 'das Haus', 'der Tisch': 'masa', masa: 'der Tisch' }
+  for (let i = 0; i < 6; i++) {
+    const prompt = ((await page.getByTestId('prompt').textContent()) ?? '').trim()
+    await page.getByTestId('answer-input').fill(answers[prompt] ?? 'zzz')
+    await page.getByTestId('test-next').click()
+    await page.waitForTimeout(100)
+  }
+  await expect(page.getByTestId('test-result').first()).toBeVisible()
+  await expect(page.getByTestId('test-score').first()).toHaveText('100%')
+  await expect(page.getByTestId('test-verdict').first()).toContainText('verificată')
+  await expect(page.getByTestId('test-table').first().locator('tbody tr')).toHaveCount(3)
+  await expect(page.getByTestId('test-history').locator('li')).toHaveCount(1)
+  await page.getByRole('button', { name: /înapoi/i }).click()
+  await expect(page.getByTestId('verified').first()).toBeVisible()
+
+  // --- install screen
+  await page.getByRole('link', { name: 'Setări' }).click()
+  await page.getByTestId('install-link').click()
+  await expect(page.getByTestId('install-screen')).toBeVisible()
+  await expect(page.getByTestId('iphone-warning')).toContainText('ecranul principal')
+})
+
+test('app launches offline after the first visit', async ({ page, context }) => {
+  await stubSpeech(page)
+  await page.goto('/')
+  await expect(page.getByTestId('unit-0')).toBeVisible()
+  // the service worker precaches the shell: reload while offline still works
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready
+  })
+  await page.waitForTimeout(1500)
+  await context.setOffline(true)
+  await page.reload()
+  await expect(page.getByTestId('unit-0')).toBeVisible()
+  await context.setOffline(false)
 })

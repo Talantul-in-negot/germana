@@ -65,6 +65,7 @@ export interface ParsedTerm {
   gender?: Gender
   /** undefined = no information, null = no plural */
   plural?: string | null
+  pluralAlternatives?: string[]
   pluralOnly?: boolean
   issues: GermanIssue[]
 }
@@ -93,16 +94,28 @@ function parseVariant(v: string): { article: Gender | null; noun: string; shorth
   return { article: null, noun: text, shorthand, text }
 }
 
-/** First CSV column: `der Tisch, -e`, `die Mutter, ¨-`, `Wie viel?|Wieviel?` … */
+/** First CSV column: `der Tisch, -e`, `die Mutter, ¨-`, `Wie viel?|Wieviel?`, `der Samstag|der Sonnabend, -e` … */
 export function parseGermanTerm(cell: string): ParsedTerm {
-  const variants = cell.split('|').map((x) => x.trim()).filter(Boolean)
+  let body = cell
+  let shared: string | null = null
+  // a trailing ", shorthand" belongs to every |-variant (der Samstag|der Sonnabend, -e)
+  const m = body.match(/^(.*\S)\s*,\s*([^,|]+)$/)
+  const mark = body.match(/^(.*?\S)\s*,?\s*(\(\s*(?:pl|sg)\.?\s*\))\s*$/i)
+  if (m && isPluralShorthand(m[2] as string)) {
+    body = m[1] as string
+    shared = (m[2] as string).trim()
+  } else if (mark && body.includes('|')) {
+    // der Januar|der Jänner (Sg.): the marker belongs to every variant
+    body = mark[1] as string
+    shared = (mark[2] as string).trim()
+  }
+  const variants = body.split('|').map((x) => x.trim()).filter(Boolean)
   const issues: GermanIssue[] = []
   if (variants.length === 0) return { display: '', alternatives: [], isNoun: false, issues }
   const first = parseVariant(variants[0] as string)
-  const alternatives = variants.slice(1).map((v) => {
-    const p = parseVariant(v)
-    return p.article ? `${p.article} ${p.noun}` : p.noun
-  })
+  if (first.shorthand === null && shared !== null) first.shorthand = shared
+  const others = variants.slice(1).map(parseVariant)
+  const alternatives = others.map((p) => (p.article ? `${p.article} ${p.noun}` : p.noun))
   if (first.article) {
     if (/^[a-zäöüß]/.test(first.noun)) issues.push('noun_lowercase')
     const out: ParsedTerm = { display: `${first.article} ${first.noun}`, alternatives, isNoun: true, gender: first.article, issues }
@@ -113,6 +126,13 @@ export function parseGermanTerm(cell: string): ParsedTerm {
         out.plural = pp.plural
         out.pluralOnly = pp.pluralOnly
         if (pp.pluralOnly) out.gender = 'die'
+        const alt: string[] = []
+        for (const o of others) {
+          if (!o.article) continue
+          const ap = expandPlural(o.noun, shared ?? first.shorthand)
+          if (!ap.error && ap.plural) alt.push(ap.plural)
+        }
+        if (alt.length) out.pluralAlternatives = alt
       }
     }
     return out
@@ -183,3 +203,57 @@ export function splitDialogue(example: string | undefined): Dialogue | null {
   if (!m) return null
   return { question: (m[1] as string).trim(), answer: (m[2] as string).trim() }
 }
+
+// ---------- ordered sets: weekdays, months, seasons ----------
+
+export const WEEKDAYS = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'] as const
+export const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'] as const
+export const SEASONS = ['Frühling', 'Sommer', 'Herbst', 'Winter'] as const
+/** Season index (into SEASONS) of each month Januar..Dezember. */
+export const SEASON_OF_MONTH = [3, 3, 0, 0, 0, 1, 1, 1, 2, 2, 2, 3] as const
+
+export interface SeqSet {
+  /** tag that marks the words of the set */
+  tag: 'wochentage' | 'monate' | 'jahreszeiten'
+  names: readonly string[]
+  /** preposition used with the set: am Montag, im Mai */
+  prep: 'am' | 'im'
+  /** other accepted spellings -> index */
+  aliases: Record<string, number>
+  /** which info card to show */
+  info: 'days' | 'months'
+}
+
+export const SEQ_SETS: readonly SeqSet[] = [
+  { tag: 'wochentage', names: WEEKDAYS, prep: 'am', aliases: { sonnabend: 5 }, info: 'days' },
+  { tag: 'monate', names: MONTHS, prep: 'im', aliases: { jänner: 0, jaenner: 0 }, info: 'months' },
+  { tag: 'jahreszeiten', names: SEASONS, prep: 'im', aliases: {}, info: 'months' },
+]
+
+export function seqSetByTag(tag: string): SeqSet | undefined {
+  return SEQ_SETS.find((s) => s.tag === tag)
+}
+
+interface SeqWordLike {
+  tags?: string[]
+  term: string
+  alternatives?: string[] | undefined
+}
+
+/** Which ordered set a word belongs to (by tag) and its position; null for everything else. */
+export function seqOf(w: SeqWordLike): { set: SeqSet; index: number } | null {
+  const tags = (w.tags ?? []).map((t) => t.toLowerCase())
+  for (const set of SEQ_SETS) {
+    if (!tags.includes(set.tag)) continue
+    for (const t of [w.term, ...(w.alternatives ?? [])]) {
+      const bare = splitArticle(t).rest.toLowerCase()
+      const i = set.names.findIndex((n) => n.toLowerCase() === bare)
+      if (i >= 0) return { set, index: i }
+      const a = set.aliases[bare]
+      if (a !== undefined) return { set, index: a }
+    }
+  }
+  return null
+}
+
+export const isSeqWord = (w: SeqWordLike): boolean => seqOf(w) !== null

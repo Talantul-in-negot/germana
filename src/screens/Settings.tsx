@@ -7,7 +7,8 @@ import { useProfile } from '../data/profile-context'
 import { resetProgress, updateProfile, updateSettings } from '../data/repo'
 import { t } from '../i18n'
 import { playSfx } from '../lib/sound'
-import { englishVoices, speak, sttSupported, ttsSupported } from '../lib/speech'
+import { germanVoices, speak, sttSupported, ttsSupported } from '../lib/speech'
+import { getMeta, setMeta } from '../data/repo'
 
 export default function Settings() {
   const { profile } = useProfile()
@@ -17,10 +18,14 @@ export default function Settings() {
   const [pendingImport, setPendingImport] = useState<unknown>(null)
   const [msg, setMsg] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [lastBackup, setLastBackup] = useState<number | null>(null)
+  useEffect(() => {
+    void getMeta<number>('lastBackupAt').then((v) => setLastBackup(v ?? null))
+  }, [])
 
   useEffect(() => {
     if (!ttsSupported()) return
-    const load = () => setVoices(englishVoices())
+    const load = () => setVoices(germanVoices())
     load()
     window.speechSynthesis.addEventListener('voiceschanged', load)
     return () => window.speechSynthesis.removeEventListener('voiceschanged', load)
@@ -34,6 +39,8 @@ export default function Settings() {
     a.download = `lexi-path-backup-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    await setMeta('lastBackupAt', Date.now())
+    setLastBackup(Date.now())
   }
 
   const onFile = async (file: File | undefined) => {
@@ -77,6 +84,7 @@ export default function Settings() {
 
       <section className="card">
         <Toggle label={t('settings.sound')} checked={s.sound} onChange={(v) => { set({ sound: v }); if (v) playSfx('correct', true) }} />
+        <Toggle label={t('settings.genderColors')} checked={s.genderColors !== false} onChange={(v) => set({ genderColors: v })} />
         <Toggle label={t('settings.hearts')} help={t('settings.heartsHelp')} checked={s.hearts} onChange={(v) => set({ hearts: v })} />
         <Toggle label={t('settings.speaking')} help={sttSupported() ? t('settings.speakingHelp') : t('settings.noStt')} checked={s.speaking && sttSupported()} disabled={!sttSupported()} onChange={(v) => set({ speaking: v })} />
       </section>
@@ -87,16 +95,17 @@ export default function Settings() {
           <p className="text-sm text-slate-500">{t('settings.noTts')}</p>
         ) : (
           <div className="grid gap-3">
-            <label className="text-sm font-bold">{t('settings.voice')}
+            {voices.length === 0 && <p className="text-sm text-amber-800">{t('settings.noGermanVoice')}</p>}
+            <label className="text-sm font-bold">{t('settings.voiceDe')}
               <select className="input mt-1 !py-2 !text-base" value={s.ttsVoice ?? ''} onChange={(e) => set({ ttsVoice: e.target.value || null })}>
-                <option value="">{t('settings.voiceAuto')}</option>
+                <option value="">{t('settings.voiceAutoDe')}</option>
                 {voices.map((v) => <option key={v.voiceURI} value={v.voiceURI}>{v.name} ({v.lang})</option>)}
               </select>
             </label>
             <label className="text-sm font-bold">{t('settings.speed')}: {s.ttsRate.toFixed(1)}×
               <input type="range" min={0.5} max={1.5} step={0.1} value={s.ttsRate} className="mt-1 w-full" onChange={(e) => set({ ttsRate: Number(e.target.value) })} />
             </label>
-            <button className="btn btn-ghost" onClick={() => speak('Hello! Nice to meet you.', { voice: s.ttsVoice, rate: s.ttsRate })}>🔊 {t('settings.test')}</button>
+            <button className="btn btn-ghost" onClick={() => speak('Guten Tag! Wie geht es dir?', { voice: s.ttsVoice, rate: s.ttsRate, lang: 'de-DE' })}>🔊 {t('settings.test')}</button>
           </div>
         )}
       </section>
@@ -107,6 +116,8 @@ export default function Settings() {
         <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" data-testid="import-file" onChange={(e) => { void onFile(e.target.files?.[0]); e.target.value = '' }} />
         <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>{t('settings.import')}</button>
         <button className="btn btn-bad" onClick={() => setConfirmReset(true)} data-testid="reset">{t('settings.reset')}</button>
+        {lastBackup && <p className="text-sm text-slate-500">{t('backup.last', { d: new Date(lastBackup).toLocaleDateString('ro-RO') })}</p>}
+        <Link to="/install" className="btn btn-ghost" data-testid="install-link">{t('settings.install')}</Link>
         {msg && <p className="font-bold text-brand" role="status">{msg}</p>}
       </section>
 

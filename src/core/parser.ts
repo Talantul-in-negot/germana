@@ -25,6 +25,7 @@ export interface ParsedRow {
   type?: WordType
   gender?: Gender
   plural?: string | null
+  pluralAlternatives?: string[]
   pluralOnly?: boolean
   verb?: VerbInfo
   alternatives?: string[]
@@ -145,6 +146,7 @@ export interface JsonWordInput {
   type?: WordType
   gender?: Gender
   plural?: string | null
+  pluralAlternatives?: string[]
   pluralOnly?: boolean
   verb?: VerbInfo
   alternatives?: string[]
@@ -159,6 +161,7 @@ export function rowToInput(r: ParsedRow): JsonWordInput {
   if (r.type) it.type = r.type
   if (r.gender) it.gender = r.gender
   if (r.plural !== undefined) it.plural = r.plural
+  if (r.pluralAlternatives?.length) it.pluralAlternatives = r.pluralAlternatives
   if (r.pluralOnly) it.pluralOnly = true
   if (r.verb) it.verb = r.verb
   if (r.alternatives?.length) it.alternatives = r.alternatives
@@ -226,6 +229,7 @@ export function rowsFromJson(items: JsonWordInput[], existingTerms: readonly str
 // ---------------------------------------------------------------------------
 
 const RANGE_TAG = /^\d+-\d+$/
+const NAMED_GROUPS = new Set(['monate', 'jahreszeiten', 'extra', 'kernfamilie', 'verwandte'])
 const VALUE_TAG = /^n=(\d+)$/
 
 interface Enriched {
@@ -244,7 +248,10 @@ export function enrichGerman(rawTerm: string, translations: string[], forms: str
     const v = t.match(VALUE_TAG)
     if (v) fields.value = Number(v[1])
     else if (RANGE_TAG.test(t)) fields.group = t
-    else tags.push(t)
+    else if (NAMED_GROUPS.has(t)) {
+      fields.group = t
+      tags.push(t)
+    } else tags.push(t)
   }
   const pt = parseGermanTerm(rawTerm)
   for (const i of pt.issues) warnings.push(i)
@@ -257,6 +264,7 @@ export function enrichGerman(rawTerm: string, translations: string[], forms: str
     if (pt.gender) fields.gender = pt.gender
     if (pt.plural !== undefined) fields.plural = pt.plural
     if (pt.pluralOnly) fields.pluralOnly = true
+    if (pt.pluralAlternatives?.length) fields.pluralAlternatives = pt.pluralAlternatives
     if (forms) {
       if (isPluralShorthand(forms)) {
         const pp = expandPlural(splitArticle(pt.display).rest, forms)
@@ -265,7 +273,11 @@ export function enrichGerman(rawTerm: string, translations: string[], forms: str
           fields.plural = pp.plural
           if (pp.pluralOnly) fields.pluralOnly = true
         }
-      } else fields.plural = bareFromExplicitPlural(forms)
+      } else {
+        const parts = forms.split('|').map((x) => bareFromExplicitPlural(x.trim())).filter(Boolean)
+        fields.plural = parts[0] ?? null
+        if (parts.length > 1) fields.pluralAlternatives = parts.slice(1)
+      }
     }
   } else if (forms) {
     const vp = parseVerbForms(pt.display, forms)
@@ -283,4 +295,45 @@ export function enrichGerman(rawTerm: string, translations: string[], forms: str
 /** Plural text with article for display: "die Mütter". */
 export function pluralDisplay(plural: string | null | undefined): string {
   return plural ? `die ${plural}` : ''
+}
+
+export interface RowEdit {
+  term?: string
+  forms?: string
+  /** bare plural, no article */
+  plural?: string
+  type?: WordType
+}
+
+/** Apply an inline edit from the preview table and re-derive article, plural, verb forms and warnings. */
+export function editRow(row: ParsedRow, patch: RowEdit): ParsedRow {
+  let next: ParsedRow = { ...row }
+  if (patch.term !== undefined || patch.forms !== undefined) {
+    const term = patch.term ?? row.term
+    const forms = patch.forms ?? row.forms ?? ''
+    const e = enrichGerman(term, row.translations, forms, [])
+    for (const k of ['gender', 'plural', 'pluralAlternatives', 'pluralOnly', 'verb', 'alternatives'] as const) delete next[k]
+    next = { ...next, ...e.fields, term: e.term, warnings: e.warnings }
+    if (forms) next.forms = forms
+    else delete next.forms
+    if (next.type === 'noun' && next.plural === undefined && row.plural !== undefined && patch.forms === undefined) next.plural = row.plural
+    if (row.value !== undefined) next.value = row.value
+    if (row.group) next.group = row.group
+  }
+  if (patch.plural !== undefined) {
+    const bare = patch.plural.trim().replace(/^(der|die|das)\s+/i, '')
+    next.plural = bare || null
+    next.warnings = next.warnings.filter((w) => w !== 'plural_unparseable')
+  }
+  if (patch.type !== undefined) {
+    next.type = patch.type
+    if (patch.type !== 'noun') {
+      delete next.gender
+      delete next.plural
+    }
+    if (patch.type !== 'verb') delete next.verb
+    else next.verb ??= {}
+  }
+  next.valid = next.issues.length === 0
+  return next
 }

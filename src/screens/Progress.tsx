@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ACHIEVEMENTS } from '../core/gamification'
-import { DAY_MS, accuracyOf, dayKey, isDue, needsPractice, strengthAt } from '../core/srs'
+import { DAY_MS, accuracyOf, dayKey, isDue, levelOf, needsPractice, wordStrengthAt } from '../core/srs'
 import type { Word, WordProgress } from '../core/types'
 import { LevelBadge, LevelBar, StrengthBar } from '../components/ui'
 import { useAchievements, useDeckWords, useDecks, useMeta, useProgressMap, useSessions } from '../data/hooks'
@@ -15,7 +15,7 @@ type Filter = 'all' | 'due' | 'weak' | 'new' | 'mastered'
 type Sort = 'weakest' | 'due' | 'level' | 'az' | 'list'
 
 export function nextReviewLabel(p: WordProgress | undefined, now: number): string {
-  if (!p || p.level === 0) return t('progress.newWord')
+  if (!p || levelOf(p) === 0) return t('progress.newWord')
   if (now >= p.dueAt) {
     const days = Math.floor((now - p.dueAt) / DAY_MS)
     return days < 1 ? t('progress.dueNow') : t('progress.overdue', { n: days })
@@ -76,15 +76,15 @@ export default function Progress() {
     const keep = list.filter(({ p }) => {
       if (filter === 'due') return !!p && isDue(p, now)
       if (filter === 'weak') return !!p && needsPractice(p, now)
-      if (filter === 'new') return !p || p.level === 0
-      if (filter === 'mastered') return !!p && p.level === 5
+      if (filter === 'new') return levelOf(p) === 0
+      if (filter === 'mastered') return levelOf(p) === 5
       return true
     })
-    const str = (x: { p?: WordProgress }): number => (x.p ? strengthAt(x.p, now) : -1)
+    const str = (x: { p?: WordProgress }): number => (x.p ? wordStrengthAt(x.p, now) : -1)
     const cmp: Record<Sort, (a: { w: Word; p?: WordProgress }, b: { w: Word; p?: WordProgress }) => number> = {
       weakest: (a, b) => str(a) - str(b),
       due: (a, b) => (a.p?.dueAt || Infinity) - (b.p?.dueAt || Infinity),
-      level: (a, b) => (b.p?.level ?? 0) - (a.p?.level ?? 0),
+      level: (a, b) => levelOf(b.p) - levelOf(a.p),
       az: (a, b) => a.w.term.localeCompare(b.w.term),
       list: (a, b) => a.w.order - b.w.order,
     }
@@ -94,7 +94,7 @@ export default function Progress() {
 
   if (!decks || !words || !progress || !sessions || !unlocked) return null
 
-  const counts = deckLevelCounts(words.map((w) => w.id), (id) => progress.get(id)?.level ?? 0)
+  const counts = deckLevelCounts(words.map((w) => w.id), (id) => levelOf(progress.get(id)))
   const masteredPct = words.length ? Math.round(((counts[5] ?? 0) / words.length) * 100) : 0
   const xpByDay = sumXpByDay(sessions)
   const have = new Set(unlocked.map((a) => a.key))
@@ -148,7 +148,7 @@ export default function Progress() {
         {rows.length === 0 && <p className="py-6 text-center text-slate-500">{t('progress.noWords')}</p>}
         <ul className="grid gap-2" data-testid="word-list">
           {rows.map(({ w, p }) => {
-            const s = p ? strengthAt(p, now) : 0
+            const s = p ? wordStrengthAt(p, now) : 0
             const acc = p ? accuracyOf(p) : null
             const practice = !!p && needsPractice(p, now)
             return (
@@ -157,7 +157,7 @@ export default function Progress() {
                   <div className="min-w-0">
                     <p className="truncate font-black">{w.term} <span className="font-semibold text-slate-500">· {w.translations[0]}</span></p>
                   </div>
-                  <LevelBadge level={p?.level ?? 0} />
+                  <LevelBadge level={levelOf(p)} />
                 </div>
                 <StrengthBar value={s} />
                 <div className="mt-1 flex justify-between text-xs font-bold text-slate-500">

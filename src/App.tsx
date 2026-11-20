@@ -6,6 +6,9 @@ import { ensureSeed } from './data/repo'
 import { t } from './i18n'
 import DeckDetail from './screens/DeckDetail'
 import Decks from './screens/Decks'
+import Drill from './screens/Drill'
+import Install from './screens/Install'
+import TestMode from './screens/TestMode'
 import Home from './screens/Home'
 import Import from './screens/Import'
 import Lesson from './screens/Lesson'
@@ -30,6 +33,8 @@ export default function App() {
       <ProfileProvider>
         <Routes>
           <Route path="/lesson/:deckId" element={<KeyedLesson />} />
+          <Route path="/test/:deckId" element={<TestMode />} />
+          <Route path="/drill/:deckId" element={<Drill />} />
           <Route element={<Layout />}>
             <Route index element={<Home />} />
             <Route path="decks" element={<Decks />} />
@@ -39,6 +44,7 @@ export default function App() {
             <Route path="progress" element={<Progress />} />
             <Route path="settings" element={<Settings />} />
             <Route path="profiles" element={<Profiles />} />
+            <Route path="install" element={<Install />} />
           </Route>
         </Routes>
       </ProfileProvider>

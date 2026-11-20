@@ -2,7 +2,10 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { displayStreak, refillHearts } from '../core/gamification'
 import { dayKey } from '../core/srs'
 import { useProfile } from '../data/profile-context'
-import { useSessions } from '../data/hooks'
+import { useMeta, useSessions } from '../data/hooks'
+import { useState } from 'react'
+import { exportAll } from '../data/backup'
+import { setMeta } from '../data/repo'
 import { sumXpByDay } from '../data/service'
 import { t, type Key } from '../i18n'
 import { ProgressRing } from './ui'
@@ -23,6 +26,21 @@ export default function Layout() {
   const todayXp = sessions ? (sumXpByDay(sessions).get(today) ?? 0) : 0
   const streak = displayStreak(profile, today)
   const hearts = refillHearts(profile.hearts, profile.heartsAt, now).hearts
+  const lastBackup = useMeta<number>('lastBackupAt')
+  const installedAt = useMeta<number>('installedAt')
+  const snoozed = useMeta<number>('backupSnoozedAt')
+  const [hidden, setHidden] = useState(false)
+  const ref = lastBackup ?? installedAt
+  const dueBackup = !hidden && ref !== undefined && now - ref > 7 * 86_400_000 && !(snoozed && now - snoozed < 86_400_000)
+  const doBackup = async () => {
+    const blob = new Blob([JSON.stringify(await exportAll(), null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `lexi-path-backup-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    await setMeta('lastBackupAt', Date.now())
+  }
 
   return (
     <div className="mx-auto flex h-full max-w-lg flex-col">
@@ -37,6 +55,13 @@ export default function Layout() {
         </div>
       </header>
 
+      {dueBackup && (
+        <div className="mx-4 mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-900" role="alert" data-testid="backup-reminder">
+          <span className="flex-1">{lastBackup === undefined ? t('backup.reminderNever') : t('backup.reminder')}</span>
+          <button className="btn btn-primary !px-3 !py-1.5 !text-sm" onClick={() => void doBackup()}>{t('backup.export')}</button>
+          <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => { setHidden(true); void setMeta('backupSnoozedAt', Date.now()) }}>{t('backup.dismiss')}</button>
+        </div>
+      )}
       <main className="flex-1 overflow-y-auto px-4 pb-24 pt-4">
         <Outlet />
       </main>

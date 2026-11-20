@@ -6,6 +6,9 @@ import './index.css'
 
 registerSW({ immediate: true })
 
+// Ask the browser not to evict our IndexedDB data (first run; harmless if already granted/unsupported).
+void navigator.storage?.persist?.().catch(() => undefined)
+
 createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
     <App />

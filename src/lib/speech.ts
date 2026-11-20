@@ -29,27 +29,51 @@ function srCtor(): SRCtor | null {
 
 export const sttSupported = (): boolean => srCtor() !== null
 
+export type SpeechLang = 'de-DE' | 'en-US'
+
+export function langFor(l2: string | undefined): SpeechLang {
+  return (l2 ?? 'German').toLowerCase().startsWith('en') ? 'en-US' : 'de-DE'
+}
+
+/** German voices, de-DE first. */
+export function germanVoices(): SpeechSynthesisVoice[] {
+  if (!ttsSupported()) return []
+  const all = window.speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith('de'))
+  return all.sort((a, b) => Number(b.lang.toLowerCase() === 'de-de') - Number(a.lang.toLowerCase() === 'de-de'))
+}
+
 export function englishVoices(): SpeechSynthesisVoice[] {
   if (!ttsSupported()) return []
   return window.speechSynthesis.getVoices().filter((v) => v.lang.toLowerCase().startsWith('en'))
 }
 
-export function speak(text: string, opts: { voice?: string | null; rate?: number; lang?: string } = {}): void {
+/** Preferred voice: the chosen one, else a de-DE voice, else any de-*; same idea for other languages. */
+export function pickVoice(voices: readonly SpeechSynthesisVoice[], lang: string, chosen?: string | null): SpeechSynthesisVoice | undefined {
+  if (chosen) {
+    const v = voices.find((x) => x.voiceURI === chosen && x.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase()))
+    if (v) return v
+  }
+  return (
+    voices.find((x) => x.lang.toLowerCase() === lang.toLowerCase()) ??
+    voices.find((x) => x.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase()))
+  )
+}
+
+export function speak(text: string, opts: { voice?: string | null; rate?: number; lang?: SpeechLang } = {}): void {
   if (!ttsSupported() || !text) return
   const synth = window.speechSynthesis
   synth.cancel()
+  const lang = opts.lang ?? 'de-DE'
   const u = new SpeechSynthesisUtterance(text)
-  u.lang = opts.lang ?? 'en-US'
+  u.lang = lang
   u.rate = opts.rate ?? 0.9
-  if (opts.voice) {
-    const v = synth.getVoices().find((x) => x.voiceURI === opts.voice)
-    if (v) u.voice = v
-  }
+  const v = pickVoice(synth.getVoices(), lang, opts.voice)
+  if (v) u.voice = v
   synth.speak(u)
 }
 
 /** Resolves with recognition alternatives (best first); rejects if unsupported or failed. */
-export function listen(lang = 'en-US'): Promise<string[]> {
+export function listen(lang: SpeechLang = 'de-DE'): Promise<string[]> {
   const Ctor = srCtor()
   if (!Ctor) return Promise.reject(new Error('unsupported'))
   return new Promise((resolve, reject) => {

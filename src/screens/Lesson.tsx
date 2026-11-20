@@ -8,6 +8,10 @@ import {
   type LessonMode, type LessonRuntime, type LessonResultItem,
 } from '../core/lesson'
 import { refillHearts } from '../core/gamification'
+import { COLLECTIVES, isSetComplete, partnerOf } from '../core/exercises'
+import { SEQ_SETS, seqOf, splitArticle } from '../core/german'
+import { effectiveLevel, skillLevel } from '../core/srs'
+import { FeedbackBody } from '../components/Feedback'
 import { ExerciseView } from '../components/exercises/ExerciseView'
 import { Confirm, Mascot } from '../components/ui'
 import { useProfile } from '../data/profile-context'
@@ -17,10 +21,10 @@ import { finishLesson, type FinishOutput } from '../data/service'
 import type { Word } from '../core/types'
 import { t } from '../i18n'
 import { playSfx } from '../lib/sound'
-import { speak, sttSupported } from '../lib/speech'
+import { langFor, speak, sttSupported, type SpeechLang } from '../lib/speech'
 import Summary from './Summary'
 
-type Phase = 'loading' | 'empty' | 'noHearts' | 'answering' | 'feedback' | 'saving' | 'summary'
+type Phase = 'loading' | 'empty' | 'noHearts' | 'info' | 'answering' | 'feedback' | 'saving' | 'summary'
 
 export default function Lesson() {
   const { deckId = '' } = useParams()
@@ -39,19 +43,21 @@ export default function Lesson() {
   const [exit, setExit] = useState(false)
   const [result, setResult] = useState<FinishOutput | null>(null)
   const [levelUps, setLevelUps] = useState<FinishOutput['levelUps']>([])
+  const [lang, setLang] = useState<SpeechLang>('de-DE')
+  const [cards, setCards] = useState<('days' | 'months')[]>([])
 
   const checkRef = useRef<(() => Outcome) | null>(null)
   const words = useRef<Word[]>([])
   const sessionId = useRef(uid())
   const startedAt = useRef(Date.now())
   const heartsLost = useRef(0)
-  const ctxRef = useRef({ rng: Math.random, newId: uid })
+  const ctxRef = useRef<{ rng: () => number; newId: () => string; seenNumbers: Word[] }>({ rng: Math.random, newId: uid, seenNumbers: [] })
   const started = useRef(false)
 
   const heartsOn = s.hearts && mode !== 'review'
   const speakOn = s.speaking && sttSupported()
 
-  const say = useCallback((text: string) => speak(text, { voice: s.ttsVoice, rate: s.ttsRate }), [s.ttsVoice, s.ttsRate])
+  const say = useCallback((text: string) => speak(text, { voice: s.ttsVoice, rate: s.ttsRate, lang }), [s.ttsVoice, s.ttsRate, lang])
 
   useEffect(() => {
     if (started.current) return
@@ -59,6 +65,8 @@ export default function Lesson() {
     void (async () => {
       const all = (await db.words.where('deckId').equals(deckId).toArray()).sort((a, b) => a.order - b.order)
       words.current = all
+      const deck = await db.decks.get(deckId)
+      setLang(langFor(deck?.l2))
       const prog = await progressMap(profile.id)
       const now = Date.now()
       const h = refillHearts(profile.hearts, profile.heartsAt, now)
@@ -68,10 +76,27 @@ export default function Lesson() {
       const sel = selectLessonWords(all, prog, now, { mode, size: DEFAULT_LESSON.size, newRatio: DEFAULT_LESSON.newRatio, unitIndex: unit }, Math.random)
       const picked = sel.wordIds.map((id) => all.find((w) => w.id === id)).filter((w): w is Word => !!w)
       if (picked.length === 0) return setPhase('empty')
-      const plan = planLesson(picked, (id) => prog.get(id)?.level ?? 0, all, { ...ctxRef.current }, speakOn, DEFAULT_LESSON.size)
+      const seenNumbers = all.filter((w) => w.value !== undefined && (prog.get(w.id)?.level ?? 0) > 0)
+      ctxRef.current.seenNumbers = seenNumbers
+      const infoOf = (w: Word) => {
+        const p = prog.get(w.id)
+        return {
+          level: p ? effectiveLevel(p) : 0,
+          skillLevels: p ? { gender: skillLevel(p, 'gender'), plural: skillLevel(p, 'plural'), forms: skillLevel(p, 'forms') } : {},
+          seenNumbers,
+          completeSets: SEQ_SETS.filter((set) => isSetComplete(all, set)).map((set) => set.tag),
+          hasSeasons: isSetComplete(all, SEQ_SETS[2] as (typeof SEQ_SETS)[number]),
+          hasPairs: all.some((x) => partnerOf(x, all) !== null),
+          collectives: all.some((x) => COLLECTIVES.some((c) => c.word === splitArticle(x.term).rest)),
+        }
+      }
+      const plan = planLesson(picked, (id) => { const p = prog.get(id); return p ? effectiveLevel(p) : 0 }, all, { ...ctxRef.current }, speakOn, DEFAULT_LESSON.size, infoOf)
       setRt(plan)
       startedAt.current = now
-      setPhase('answering')
+      // one info card per kind of ordered set in the lesson (all der + am/im)
+      const kinds = [...new Set(picked.map((w) => seqOf(w)?.set.info).filter((k): k is 'days' | 'months' => !!k))]
+      setCards(kinds)
+      setPhase(kinds.length ? 'info' : 'answering')
     })()
   }, [deckId, mode, unit, profile, s.hearts, speakOn])
 
@@ -118,7 +143,10 @@ export default function Lesson() {
     const ex = current(rt)
     if (!ex) return
     const word = words.current.find((w) => w.id === ex.wordId) as Word
-    const item: LessonResultItem = { wordId: ex.wordId, type: ex.type, correct: outcome.correct, ...(outcome.quality ? { quality: outcome.quality } : {}) }
+    const item: LessonResultItem = {
+      wordId: ex.wordId, type: ex.type, correct: outcome.correct, ...(outcome.quality ? { quality: outcome.quality } : {}),
+      ...(outcome.credits ? { credits: outcome.credits } : {}),
+    }
     const nextRt = submitResult(rt, item, word, { deckWords: words.current, ...ctxRef.current }, speakOn)
     setRt(nextRt)
     setOutcome(null)
@@ -157,6 +185,18 @@ export default function Lesson() {
       </div>
     )
   }
+  if (phase === 'info') {
+    return (
+      <div className="mx-auto flex h-full max-w-lg flex-col justify-center gap-4 p-6" data-testid="info-card">
+        <Mascot size={90} />
+        <h1 className="text-2xl font-black">{t('lesson.info')}</h1>
+        {cards.map((c) => (
+          <p key={c} className="rounded-2xl bg-brand-soft p-4 text-lg font-bold">{t(c === 'days' ? 'lesson.infoDays' : 'lesson.infoMonths')}</p>
+        ))}
+        <button className="btn btn-primary" onClick={() => setPhase('answering')} data-testid="info-continue">{t('lesson.infoContinue')}</button>
+      </div>
+    )
+  }
   if (phase === 'summary' && result) {
     return (
       <Summary
@@ -185,7 +225,7 @@ export default function Lesson() {
       <main className="flex-1 overflow-y-auto px-4 pb-44 pt-6">
         <AnimatePresence mode="wait">
           <motion.div key={ex.id} initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.18 }}>
-            <ExerciseView ex={ex} locked={phase === 'feedback'} outcome={outcome} onReady={onReady} onSubmit={commit} say={say} />
+            <ExerciseView ex={ex} locked={phase === 'feedback'} outcome={outcome} onReady={onReady} onSubmit={commit} say={say} lang={lang} />
           </motion.div>
         </AnimatePresence>
       </main>
@@ -195,16 +235,7 @@ export default function Lesson() {
           {feedback ? (
             <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} data-testid="feedback">
               <div className="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <p className={`text-xl font-black ${outcome.correct ? 'text-green-800' : 'text-red-800'}`}>{outcome.correct ? t('lesson.correct') : t('lesson.wrong')}</p>
-                  {outcome.note === 'diacritics' && <p className="font-bold text-green-900">{t('lesson.diacritics', { a: outcome.expected })}</p>}
-                  {outcome.note === 'typo' && <p className="font-bold text-green-900">{t('lesson.typo', { a: outcome.expected })}</p>}
-                  {!outcome.correct && (
-                    <p className="font-bold text-red-900">
-                      {t('lesson.answer')} <span data-testid="correct-answer">{outcome.expected}</span>
-                    </p>
-                  )}
-                </div>
+                <FeedbackBody outcome={outcome} />
                 {word && (
                   <button aria-label={t('lesson.replay')} className="rounded-xl bg-white/70 px-3 py-2 text-2xl" onClick={() => say(word.term)}>🔊</button>
                 )}

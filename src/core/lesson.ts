@@ -150,7 +150,12 @@ export function submitResult(
       ? 'num_digits_to_word'
       : chooseType(word, 0, { deckSize: ctx.deckWords.length, speakEnabled, rng: ctx.rng }, item.type)
     const ex = buildExercise(word, retryType === 'match' || retryType === 'match_qa' ? 'mc_l2_l1' : retryType, ctx)
-    const at = Math.min(queue.length, rt.cursor + 1 + Math.min(3, queue.length - rt.cursor - 1))
+    let at = Math.min(queue.length, rt.cursor + 1 + Math.min(3, queue.length - rt.cursor - 1))
+    if (hardNumber) {
+      // the retry must be the very next exercise for this word, before any other pending one
+      const pending = queue.findIndex((e, i) => i > rt.cursor && e.wordId === word.id)
+      if (pending >= 0) at = Math.min(at, pending)
+    }
     queue.splice(Math.max(at, rt.cursor + 1), 0, ex)
     requeued += 1
   }

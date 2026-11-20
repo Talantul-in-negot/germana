@@ -35,6 +35,7 @@ function toWord(it: JsonWordInput, deckId: string, order: number, unitIndex: num
   if (it.type) w.type = it.type
   if (it.gender) w.gender = it.gender
   if (it.plural !== undefined) w.plural = it.plural
+  if (it.pluralAlternatives?.length) w.pluralAlternatives = it.pluralAlternatives
   if (it.pluralOnly) w.pluralOnly = true
   if (it.verb) w.verb = it.verb
   if (it.alternatives?.length) w.alternatives = it.alternatives
@@ -185,8 +186,8 @@ export function progressOrNew(map: ReadonlyMap<string, WordProgress>, profileId:
 // ---------- first run ----------
 
 /**
- * First run: creates a profile and the German demo lessons. Also adds the German seed lessons to
- * installs that predate them (once, tracked by meta `seed:de1`), never touching existing data.
+ * First run: creates a profile and the German demo lessons. Each seed lesson is added once
+ * (meta `seed:de:<key>`), also on installs that predate it, and never touches existing data.
  */
 export async function ensureSeed(): Promise<void> {
   await db.transaction('rw', db.profiles, db.decks, db.words, db.meta, async () => {
@@ -195,13 +196,19 @@ export async function ensureSeed(): Promise<void> {
       await db.profiles.add(p)
       await setMeta('activeProfileId', p.id)
     }
-    if (!(await getMeta<boolean>('seed:de1'))) {
-      for (const seed of GERMAN_SEEDS) {
-        const items = parseWordList(seed.text).rows.filter((r) => r.valid).map(rowToInput)
-        await createDeck(seed.name, items, { course: COURSE, cefr: 'A1', lesson: seed.lesson })
+    const legacy = await getMeta<boolean>('seed:de1') // first German release: familie, wfragen, zahlen
+    for (const seed of GERMAN_SEEDS) {
+      const key = `seed:de:${seed.key}`
+      if (await getMeta<boolean>(key)) continue
+      if (legacy && ['familie', 'wfragen', 'zahlen'].includes(seed.key)) {
+        await setMeta(key, true)
+        continue
       }
-      await setMeta('seed:de1', true)
+      const items = parseWordList(seed.text).rows.filter((r) => r.valid).map(rowToInput)
+      await createDeck(seed.name, items, { course: COURSE, cefr: 'A1', lesson: seed.lesson })
+      await setMeta(key, true)
     }
+    if (!(await getMeta<number>('installedAt'))) await setMeta('installedAt', Date.now())
     await setMeta('seeded', true)
   })
 }

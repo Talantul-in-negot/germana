@@ -43,6 +43,16 @@ export const EXERCISE_WEIGHT: Record<ExerciseType, number> = {
   num_digits_to_word: 2.5,
   num_word_to_digits: 1.2,
   num_arith: 2.5,
+  seq_order: 1.8,
+  seq_neighbor: 1.5,
+  seq_neighbor_type: 2.2,
+  fill_prep: 1.5,
+  listen_ro: 1.0,
+  month_season: 1.5,
+  season_months: 1.8,
+  gender_pairs: 1.0,
+  collective: 1.5,
+  possessive: 1.5,
 }
 
 /** Credit needed to leave level N (index = current level 1..4). */
@@ -119,11 +129,12 @@ export function strengthAt(p: WordProgress, now: number): number {
 }
 
 export function isDue(p: WordProgress, now: number): boolean {
-  return p.level > 0 && p.lastSeenAt > 0 && now >= p.dueAt
+  if (p.level > 0 && p.lastSeenAt > 0 && now >= p.dueAt) return true
+  return Object.values(p.skills ?? {}).some((s) => !!s && s.level > 0 && s.lastSeenAt > 0 && now >= s.dueAt)
 }
 
 export function needsPractice(p: WordProgress, now: number): boolean {
-  return p.level > 0 && (isDue(p, now) || strengthAt(p, now) < 50)
+  return p.level > 0 && (isDue(p, now) || wordStrengthAt(p, now) < 50)
 }
 
 export interface AnswerInput {
@@ -249,7 +260,7 @@ export function accuracyOf(p: WordProgress): number | null {
 
 /** Lesson-selection priority: overdue words first, then the weakest. Higher = more urgent. */
 export function reviewPriority(p: WordProgress, now: number): number {
-  const s = strengthAt(p, now)
+  const s = wordStrengthAt(p, now)
   const overdue = isDue(p, now) ? 100 + Math.min((now - p.dueAt) / DAY_MS, 60) : 0
   return overdue + (100 - s)
 }
@@ -262,11 +273,13 @@ export function reviewPriority(p: WordProgress, now: number): number {
 type ExtraSkill = Exclude<SubSkill, 'meaning'>
 
 /** Which extra sub-skills a word needs besides its meaning. */
-export function requiredSkills(w: Pick<Word, 'type' | 'gender' | 'plural' | 'pluralOnly' | 'verb'>): ExtraSkill[] {
+export function requiredSkills(w: Pick<Word, 'type' | 'gender' | 'plural' | 'pluralOnly' | 'verb'> & { tags?: string[] }): ExtraSkill[] {
   const out: ExtraSkill[] = []
   if (w.type === 'noun' && w.gender) {
-    if (!w.pluralOnly) out.push('gender')
-    if (w.plural) out.push('plural')
+    // weekdays, months and seasons are all `der`: one info card instead of an article drill
+    const allDer = (w.tags ?? []).some((t) => t === 'wochentage' || t === 'monate' || t === 'jahreszeiten')
+    if (!allDer) out.push('gender') // (Pl.) nouns: meaning + article only (always `die`)
+    if (w.plural && !w.pluralOnly) out.push('plural')
   }
   if (w.type === 'verb' && w.verb && (w.verb.present3sg || w.verb.praeteritum || w.verb.perfekt)) out.push('forms')
   return out
@@ -321,4 +334,9 @@ export function dueNow(p: WordProgress, now: number): WordProgress {
   const skills: WordProgress['skills'] = {}
   for (const [k, v] of Object.entries(p.skills ?? {})) skills[k as ExtraSkill] = { ...(v as SkillProgress), dueAt: now }
   return { ...p, dueAt: now, skills }
+}
+
+/** Effective level of an optional progress record (0 when the word was never practised). */
+export function levelOf(p: WordProgress | undefined): Level {
+  return p ? effectiveLevel(p) : 0
 }

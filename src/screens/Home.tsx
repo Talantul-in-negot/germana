@@ -1,8 +1,10 @@
 import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { groupByCourse, sortDecks } from '../core/decks'
 import { HEART_REFILL_MS, crownFor, refillHearts, unitMastery, unitStatus, type UnitStatus } from '../core/gamification'
 import { isDue } from '../core/srs'
+import { levelOf } from '../core/srs'
 import { Crowns, Mascot, Sheet } from '../components/ui'
 import { useDeckWords, useDecks, useMeta, useProgressMap } from '../data/hooks'
 import { useProfile } from '../data/profile-context'
@@ -14,7 +16,8 @@ export default function Home() {
   const nav = useNavigate()
   const decks = useDecks()
   const activeId = useMeta<string>('activeDeckId')
-  const deck = decks?.find((d) => d.id === activeId) ?? decks?.[0]
+  const sorted = useMemo(() => (decks ? sortDecks(decks) : []), [decks])
+  const deck = sorted.find((d) => d.id === activeId) ?? sorted[0]
   const words = useDeckWords(deck?.id)
   const progress = useProgressMap(profile.id)
   const [openUnit, setOpenUnit] = useState<number | null>(null)
@@ -29,7 +32,7 @@ export default function Home() {
     const byUnit: number[][] = []
     const ids: string[][] = []
     for (const w of words) {
-      ;(byUnit[w.unitIndex] ??= []).push(progress.get(w.id)?.level ?? 0)
+      ;(byUnit[w.unitIndex] ??= []).push(levelOf(progress.get(w.id)))
       ;(ids[w.unitIndex] ??= []).push(w.id)
     }
     return byUnit.map((levels, i) => ({
@@ -63,14 +66,20 @@ export default function Home() {
     <div>
       {decks.length > 1 && (
         <select className="input mb-3 !py-2 !text-base font-bold" value={deck.id} aria-label={t('decks.active')} onChange={(e) => void setMeta('activeDeckId', e.target.value)}>
-          {decks.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          {groupByCourse(decks).map((g) => (
+            <optgroup key={g.course ?? 'none'} label={g.course ?? t('decks.noCourse')}>
+              {g.decks.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </optgroup>
+          ))}
         </select>
       )}
       <div className="flex items-center gap-3 rounded-3xl bg-brand p-4 text-white">
         <Mascot size={64} />
         <div className="flex-1">
           <p className="text-lg font-black">{deck.name}</p>
-          <p className="text-sm opacity-90">{t('common.words', { n: words.length })} · {t('common.units', { n: units.length })}</p>
+          <p className="text-sm opacity-90">
+            {deck.course ? `${deck.course} · ` : ''}{deck.cefr ? `${deck.cefr} · ` : ''}{t('common.words', { n: words.length })} · {t('common.units', { n: units.length })}
+          </p>
         </div>
       </div>
 
@@ -79,6 +88,13 @@ export default function Home() {
       <div className="mt-3 flex flex-wrap gap-2">
         {dueCount > 0 && <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-extrabold text-amber-800">{t('home.dueWords', { n: dueCount })}</span>}
         <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => start('weak')}>{t('home.practice')}</button>
+        <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => nav(`/test/${deck.id}`)} data-testid="home-test">{t('home.testLesson')}</button>
+        {words.some((w) => w.type === 'noun' && w.gender && !w.pluralOnly) && (
+          <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => nav(`/drill/${deck.id}?kind=articles`)}>{t('home.articlesDrill')}</button>
+        )}
+        {words.some((w) => w.value !== undefined) && (
+          <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => nav(`/drill/${deck.id}?kind=numbers`)}>{t('home.numbersDrill')}</button>
+        )}
         {profile.settings.hearts && <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => start('review')}>{t('home.review')}</button>}
       </div>
 

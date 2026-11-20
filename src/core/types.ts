@@ -25,6 +25,18 @@ export type ExerciseType =
   | 'num_digits_to_word'
   | 'num_word_to_digits'
   | 'num_arith'
+  // ordered sets: weekdays, months, seasons
+  | 'seq_order'
+  | 'seq_neighbor'
+  | 'seq_neighbor_type'
+  | 'fill_prep'
+  | 'listen_ro'
+  | 'month_season'
+  | 'season_months'
+  // family
+  | 'gender_pairs'
+  | 'collective'
+  | 'possessive'
 
 export type WordType = 'noun' | 'verb' | 'other'
 export type Gender = 'der' | 'die' | 'das'
@@ -70,6 +82,8 @@ export interface Word {
   gender?: Gender
   /** plural form WITHOUT article; null = no plural, undefined = unknown */
   plural?: string | null
+  /** accepted alternative plurals (der Samstag|der Sonnabend, -e -> Sonnabende) */
+  pluralAlternatives?: string[]
   pluralOnly?: boolean
   verb?: VerbInfo
   /** additional accepted German variants (display form, with article for nouns) */
@@ -177,6 +191,16 @@ export interface TestWordResult {
   context: { ok: boolean; given: string; expected: string } | null
 }
 
+/** Extra scored items that are not per-word (e.g. the weekday sequence). */
+export interface TestExtra {
+  key: 'sequence'
+  /** which set: wochentage / monate / jahreszeiten */
+  set: string
+  ok: boolean
+  given: string
+  expected: string
+}
+
 export interface TestResult {
   id: string
   profileId: string
@@ -187,5 +211,6 @@ export interface TestResult {
   total: number
   correct: number
   words: TestWordResult[]
+  extras?: TestExtra[]
   verified: boolean
 }

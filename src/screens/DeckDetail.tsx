@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { levelOf } from '../core/srs'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { splitTranslations } from '../core/parser'
 import type { Word } from '../core/types'
 import { Confirm, LevelBadge, Sheet } from '../components/ui'
+import { Term } from '../components/Term'
 import { useDeckWords, useDecks, useProgressMap } from '../data/hooks'
 import { useProfile } from '../data/profile-context'
 import { deleteWord, renameDeck, updateWord } from '../data/repo'
@@ -69,10 +71,16 @@ export default function DeckDetail() {
             {words.filter((w) => w.unitIndex === u).map((w) => (
               <li key={w.id} className="card flex items-center gap-2 !p-3">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-black">{w.term}</p>
+                  <p className="truncate font-black"><Term text={w.term} />{w.alternatives?.length ? <span className="font-semibold text-slate-400"> | {w.alternatives.join(' | ')}</span> : null}</p>
                   <p className="truncate text-sm text-slate-600">{w.translations.join(' | ')}</p>
+                  {(w.plural || w.verb?.present3sg) && (
+                    <p className="truncate text-xs text-slate-500">
+                      {w.plural ? `${w.pluralOnly ? '(Pl.) ' : 'Pl.: die '}${w.plural}${w.pluralAlternatives?.length ? ` | die ${w.pluralAlternatives.join(' | die ')}` : ''}` : ''}
+                      {w.verb?.present3sg ? [w.verb.present3sg, w.verb.praeteritum, w.verb.perfekt].filter(Boolean).join(', ') : ''}
+                    </p>
+                  )}
                 </div>
-                <LevelBadge level={progress.get(w.id)?.level ?? 0} />
+                <LevelBadge level={levelOf(progress.get(w.id))} />
                 <button aria-label={t('common.edit')} className="text-xl" onClick={() => open(w)}>✏️</button>
                 <button aria-label={t('common.delete')} className="text-xl" onClick={() => setDel(w)}>🗑️</button>
               </li>

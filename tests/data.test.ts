@@ -18,14 +18,14 @@ describe('repo', () => {
     await ensureSeed()
     await ensureSeed()
     expect(await db.profiles.count()).toBe(1)
-    expect(await db.decks.count()).toBe(3)
+    expect(await db.decks.count()).toBe(6)
     const decks = await db.decks.toArray()
     expect(decks.every((d) => d.course === 'Menschen A1' && d.cefr === 'A1' && d.l2 === 'German')).toBe(true)
     const words = await db.words.toArray()
-    expect(words).toHaveLength(12 + 8 + 41)
+    expect(words).toHaveLength(12 + 8 + 12 + 20 + 16 + 41)
     const zahlen = decks.find((d) => d.name.startsWith('Zahlen'))!
     expect(new Set(words.filter((w) => w.deckId === zahlen.id).map((w) => w.unitIndex)).size).toBe(4)
-    const familie = decks.find((d) => d.name.includes('Familie'))!
+    const familie = decks.find((d) => d.name.includes('Erste'))!
     expect(new Set(words.filter((w) => w.deckId === familie.id).map((w) => w.unitIndex)).size).toBe(1)
     const mutter = words.find((w) => w.term === 'die Mutter')!
     expect(mutter).toMatchObject({ type: 'noun', gender: 'die', plural: 'Mütter' })
@@ -65,7 +65,7 @@ describe('lesson completion + persistence', () => {
   it('finishLesson stores progress/xp/streak and is visible after reading again', async () => {
     await ensureSeed()
     const profile = (await db.profiles.toCollection().first())!
-    const deck = (await db.decks.toArray()).find((d) => d.name.includes('Familie'))!
+    const deck = (await db.decks.toArray()).find((d) => d.name.includes('Erste'))!
     const words = await db.words.where('deckId').equals(deck.id).toArray()
     const rng = seededRng(3)
     const sel = selectLessonWords(words, new Map(), Date.now(), { mode: 'unit', size: 12, newRatio: 0.3, unitIndex: 0 }, rng)
@@ -105,7 +105,7 @@ describe('backup', () => {
   it('export -> wipe -> import restores everything', async () => {
     await ensureSeed()
     const profile = (await db.profiles.toCollection().first())!
-    const deck = (await db.decks.toArray()).find((d) => d.name.includes('Familie'))!
+    const deck = (await db.decks.toArray()).find((d) => d.name.includes('Erste'))!
     const w = (await db.words.where('deckId').equals(deck.id).first())!
     const now = Date.now()
     await finishLesson({
