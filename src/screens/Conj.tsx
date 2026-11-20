@@ -2,13 +2,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
-  PERSONS, answerItem, buildStageItems, canPassStage, currentItem, runFinished, stagePassed, stageUnlocked, stagesPassed, startRun,
+  PERSONS, answerItem, buildStageItems, currentItem, runFinished, startRun,
   type ConjItem, type ConjRun, type Stage,
 } from '../core/conjugation'
-import { conjTier } from '../core/gamification'
+import { verbCrown } from '../core/gamification'
 import { uid } from '../core/id'
 import type { LessonResultItem } from '../core/lesson'
-import { dayKey, personStrengths } from '../core/srs'
+import { personStrengths } from '../core/srs'
 import type { ExerciseType, Word, WordProgress } from '../core/types'
 import { ConjRow } from '../components/ConjRow'
 import { Crowns, Mascot } from '../components/ui'
@@ -32,10 +32,10 @@ export default function Conj() {
   const [prog, setProg] = useState<WordProgress | undefined>()
   const [stage, setStage] = useState<Stage>(1)
   const [run, setRun] = useState<ConjRun | null>(null)
-  const [outcome, setOutcome] = useState<{ passedByRule: boolean; recorded: boolean; out: FinishOutput; firstTry: number } | null>(null)
+  const [cardOpen, setCardOpen] = useState(false)
+  const [outcome, setOutcome] = useState<{ out: FinishOutput; firstTry: number } | null>(null)
   const sessionId = useRef(uid())
   const started = useRef(0)
-  const today = dayKey(Date.now())
 
   const load = useCallback(async () => {
     const ws = await db.words.where('deckId').equals(deckId).toArray()
@@ -51,6 +51,7 @@ export default function Conj() {
   const start = (s: Stage) => {
     if (!verb) return
     setStage(s)
+    setCardOpen(false)
     setRun(startRun(buildStageItems(verb, deckWords, s)))
     sessionId.current = uid()
     started.current = Date.now()
@@ -60,21 +61,18 @@ export default function Conj() {
   const finish = useCallback(async (final: ConjRun, s: Stage) => {
     if (!verb) return
     setPhase('saving')
-    const passedByRule = stagePassed(final)
-    const recorded = passedByRule && canPassStage(prog?.conj, s, today)
     const results: LessonResultItem[] = final.attempts.map((a) => ({
       wordId: verb.id, type: STAGE_TYPE[s], correct: a.correct, credits: [{ skill: 'forms', correct: a.correct, person: a.person }],
     }))
     const out = await finishLesson({
       profileId: profile.id, deckId, sessionId: sessionId.current, results, startedAt: started.current, now: Date.now(), mode: 'unit', heartsLost: 0,
-      conj: { wordId: verb.id, stage: s, passed: recorded },
     })
     const firstTry = [0, 1, 2, 3, 4, 5].filter((p) => final.personOk[p] === true).length
     setProg(await db.progress.get([profile.id, verb.id]))
-    setOutcome({ passedByRule, recorded, out, firstTry })
+    setOutcome({ out, firstTry })
     setPhase('result')
-    playSfx(passedByRule ? 'finish' : 'wrong', profile.settings.sound)
-  }, [verb, prog, today, profile.id, profile.settings.sound, deckId])
+    playSfx('finish', profile.settings.sound)
+  }, [verb, profile.id, profile.settings.sound, deckId])
 
   const onDone = (correct: boolean) => {
     if (!run) return
@@ -109,7 +107,12 @@ export default function Conj() {
         </header>
         <main className="flex-1 overflow-y-auto px-4 pb-10 pt-6">
           <h2 className="mb-4 text-lg font-black text-slate-600">{t(`conj.stage${stage}` as Key)}</h2>
-          <ConjRow key={item.id + run.cursor} item={item} verb={verb} showCard={stage === 1} onDone={(c) => onDone(c)} />
+          {stage !== 1 && (
+            <button className="btn btn-ghost mb-3 !px-3 !py-1.5 !text-sm" onClick={() => setCardOpen((v) => !v)} data-testid="toggle-card">
+              {cardOpen ? t('conj.hideCard') : t('conj.showCard')}
+            </button>
+          )}
+          <ConjRow key={item.id + run.cursor} item={item} verb={verb} showCard={stage === 1 || cardOpen} onDone={(c) => onDone(c)} />
         </main>
       </div>
     )
@@ -118,8 +121,8 @@ export default function Conj() {
   if (phase === 'result' && outcome) {
     return (
       <div className="mx-auto flex h-full max-w-lg flex-col items-center justify-center gap-3 p-6 text-center" data-testid="conj-result">
-        <Mascot size={100} mood={outcome.passedByRule ? 'cheer' : 'sad'} />
-        <h1 className="text-2xl font-black">{outcome.recorded ? t('conj.passedNow') : outcome.passedByRule ? t('conj.sameDay') : t('conj.failedNow')}</h1>
+        <Mascot size={100} mood="cheer" />
+        <h1 className="text-2xl font-black">{t('conj.done')}</h1>
         <p className="font-bold text-slate-600">{t('conj.firstTry', { n: outcome.firstTry })}</p>
         <p className="font-bold text-brand">+{outcome.out.xp + outcome.out.bonusXp} XP</p>
         <div className="mt-2 flex w-full gap-3">
@@ -130,8 +133,7 @@ export default function Conj() {
     )
   }
 
-  const passed = prog?.conj?.passed ?? [null, null, null]
-  const tier = conjTier(stagesPassed(prog?.conj), strengths)
+  const tier = verbCrown(strengths)
   return (
     <div className="mx-auto h-full max-w-lg overflow-y-auto p-5 pb-12" data-testid="conj-menu">
       <button className="mb-2 text-sm font-bold text-brand" onClick={() => nav(-1)}>← {t('common.back')}</button>
@@ -140,27 +142,19 @@ export default function Conj() {
         <Crowns tier={tier} size={22} />
       </div>
       <p className="mb-4 text-slate-500">{verb.translations.join(' | ')}</p>
-      <ul className="grid gap-3">
-        {([1, 2, 3] as const).map((s) => {
-          const unlocked = stageUnlocked(prog?.conj, s, today)
-          const date = passed[s - 1]
-          return (
-            <li key={s} className="card" data-testid={`stage-${s}`} data-state={date ? 'passed' : unlocked ? 'open' : 'locked'}>
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="font-black">{t(`conj.stage${s}` as Key)}</p>
-                  <p className="text-sm text-slate-500">{t(`conj.stage${s}.d` as Key)}</p>
-                  {date && <p className="text-xs font-bold text-good">✓ {t('conj.passedOn', { d: date })}</p>}
-                  {!unlocked && <p className="text-xs font-bold text-amber-700">🔒 {s === 2 && !passed[0] ? t('conj.lockedPrev') : s === 3 && !passed[1] ? t('conj.lockedPrev') : t('conj.locked')}</p>}
-                </div>
-                <button className="btn btn-primary !px-4 !py-2" disabled={!unlocked} onClick={() => start(s)} data-testid={`start-stage-${s}`}>
-                  {date ? t('conj.practice') : t('conj.start')}
-                </button>
-              </div>
-            </li>
-          )
-        })}
-      </ul>
+      <div className="mb-3 grid grid-cols-3 gap-2" role="tablist" aria-label={t('conj.title')}>
+        {([1, 2, 3] as const).map((s) => (
+          <button key={s} role="tab" aria-selected={stage === s} onClick={() => setStage(s)} data-testid={`stage-${s}`}
+            className={`rounded-2xl border-2 px-2 py-2 text-sm font-black ${stage === s ? 'border-brand bg-brand text-white' : 'border-slate-300 bg-white text-slate-700'}`}>
+            {t(`conj.stageShort${s}` as Key)}
+          </button>
+        ))}
+      </div>
+      <div className="card">
+        <p className="font-black">{t(`conj.stage${stage}` as Key)}</p>
+        <p className="mb-3 text-sm text-slate-500">{t(`conj.stage${stage}.d` as Key)}</p>
+        <button className="btn btn-primary w-full" onClick={() => start(stage)} data-testid={`start-stage-${stage}`}>{t('conj.start')}</button>
+      </div>
       <section className="card mt-4">
         <p className="mb-2 text-sm font-black">{t('conj.dots')}</p>
         <ul className="grid grid-cols-6 gap-1 text-center text-[11px] font-bold text-slate-500">

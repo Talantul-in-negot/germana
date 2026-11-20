@@ -58,3 +58,11 @@ Choices made without asking (the brief said: pick the simplest reasonable option
     clears `example`/`exampleRo` on the remaining seed words and re-numbers unit indices. Other decks (imported by the adult) are never touched. Progress rows of kept words are untouched.
 27. **Tests keep their own example-rich fixture** (`tests/fixtures/seed-fixture.ts`); the shipped seed no longer has `VERB_SENTENCE_RO`.
 28. **No exercise code changed**: sentence exercises appear for any word that has an example; Conjugare stage 2 already falls back to the "pronoun ___ (verb)" rows.
+
+## No locks, no time gates
+29. **Everything is open from the first launch**: units, verbs, the 3 Conjugare stages, "Toate verbele", "Test lecție", "Articole rapid", "Exersează cuvintele slabe".
+    The path marks only the first not-yet-bronze unit as the suggested one (`data-status="next"`); `UnitStatus` is `open | completed`.
+30. **Conjugare** has a stage selector (tabs) and no pass/fail rule: the result screen only shows first-try count and XP. The stage-pass dates (`WordProgress.conj`)
+    were deleted by Dexie v5; a verb's crown is `verbCrown` = average of its 6 persons, no 60% cap.
+31. **Hints**: the conjugation card is always available (ⓘ in lessons, toggle in stages 2-3), free of XP cost. Test lecție never shows it.
+32. A mode with nothing to practise shows the friendly `lesson.nothing` message instead of a lock. "Se deblochează" / 🔒 strings were removed; achievements keep their own "Blocată" label (not a gate).

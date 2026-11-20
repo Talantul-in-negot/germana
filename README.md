@@ -95,7 +95,7 @@ Fiecare cuvânt are un nivel: 0 Nou · 1 Văzut · 2 În învățare · 3 Famili
   Nivelul cuvântului este limitat de cea mai slabă subabilitate necesară (nivel subabilitate + 2): un substantiv
   rămâne ≤ 3 cât timp articolul e nesigur și nu atinge 5 fără plural.
 * **Verbe cu tabel Präsens:** `forms` se urmărește **per persoană** (6 contoare); nivelul `forms` este media lor.
-  Coroana unui verb folosește puterea medie a celor 6 persoane și nu poate fi de aur dacă vreo persoană e sub 60%.
+  Coroana unui verb vine din puterea medie a celor 6 persoane (fără plafon).
 
 ## Răspunsuri scrise
 
@@ -109,10 +109,11 @@ Fiecare cuvânt are un nivel: 0 Nou · 1 Văzut · 2 În învățare · 3 Famili
 
 ## Moduri speciale
 
-* **Conjugare** (verbe cu tabel Präsens): 3 etape pe verb – ghidat (card vizibil, 3 opțiuni), dropdown cu toate formele
-  (fiecare persoană de două ori, singură și în propoziție), scris. Trecerea cere ≥ 5/6 persoane corecte din prima;
-  rândurile greșite se repetă. O etapă nu se trece de două ori în aceeași zi, iar următoarea se deschide într-o zi următoare.
-  **Toate verbele** se deblochează cu 3 verbe la argint (20 de perechi verb × persoană, cu grilă la final).
+* **Totul e deschis de la început:** orice unitate, orice verb, orice etapă și orice mod se pot deschide oricând, în orice ordine.
+  Căpșorul (fawn-ul) doar sugerează următoarea unitate. Cardul de conjugare e mereu disponibil (gratuit), cu excepția modului Test lecție.
+* **Conjugare** (verbe cu tabel Präsens): 3 etape la alegere (selector sus) – ghidat (card vizibil, 3 opțiuni), dropdown cu toate formele
+  (fiecare persoană de două ori, singură și în propoziție), scris. Rândurile greșite se repetă la sfârșitul etapei.
+  **Toate verbele:** 20 de perechi verb × persoană, cu grilă la final.
 * **Test lecție:** fiecare cuvânt DE→RO, RO→DE și în context (unde există exemplu), plus ordinea seturilor
   (zile/luni/anotimpuri: toate în ordine pentru punct) și cele 6 persoane scrise pentru verbe. Fără indicii, fără
   reîncercări, fără feedback până la final. Istoricul se păstrează pe lecție; ≥ 90% = **Verificată ✓**; cuvintele

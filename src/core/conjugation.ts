@@ -144,33 +144,6 @@ export interface ConjItem {
   answer: string
 }
 
-export interface ConjState {
-  /** date (YYYY-MM-DD) on which each stage was first passed */
-  passed: (string | null)[]
-}
-
-export const newConj = (): ConjState => ({ passed: [null, null, null] })
-
-/** Stage k needs stage k-1 passed on an EARLIER day. */
-export function stageUnlocked(c: ConjState | undefined, stage: Stage, today: string): boolean {
-  if (stage === 1) return true
-  const prev = c?.passed[stage - 2]
-  return !!prev && prev < today
-}
-
-/** A stage cannot be passed twice on the same day, nor re-recorded once passed. */
-export function canPassStage(c: ConjState | undefined, stage: Stage, today: string): boolean {
-  return stageUnlocked(c, stage, today) && !c?.passed[stage - 1]
-}
-
-export function markPassed(c: ConjState | undefined, stage: Stage, today: string): ConjState {
-  const cur = c ? { passed: [...c.passed] } : newConj()
-  if (!cur.passed[stage - 1] && stageUnlocked(c, stage, today)) cur.passed[stage - 1] = today
-  return cur
-}
-
-export const stagesPassed = (c: ConjState | undefined): number => (c?.passed ?? []).filter(Boolean).length
-
 export function buildStageItems(verb: Word, deckWords: Word[], stage: Stage, rng: () => number = Math.random): ConjItem[] {
   const present = verb.verb?.present as Present
   const persons = [0, 1, 2, 3, 4, 5]
@@ -231,11 +204,6 @@ export function answerItem(r: ConjRun, correct: boolean, rng: () => number = Mat
   return { queue, cursor: r.cursor + 1, personOk, seen, attempts: [...r.attempts, { person: item.person, correct, firstTry }] }
 }
 
-/** Passing a stage requires >= 5 of the 6 persons right on the first try. */
-export function stagePassed(r: ConjRun): boolean {
-  return [0, 1, 2, 3, 4, 5].filter((p) => r.personOk[p] === true).length >= 5
-}
-
 // ---------- "Toate verbele" ----------
 
 export interface Pair {
@@ -256,5 +224,3 @@ export function pickPairs(verbIds: string[], rng: () => number = Math.random, co
   return out
 }
 
-/** "Toate verbele" unlocks once >= 3 verbs reached silver (2 stages passed). */
-export const allVerbsUnlocked = (passedStages: number[]): boolean => passedStages.filter((n) => n >= 2).length >= 3

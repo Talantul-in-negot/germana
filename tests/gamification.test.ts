@@ -74,15 +74,13 @@ describe('crowns & units', () => {
     expect(unitMastery([])).toBe(0)
     expect(unitMastery([0, 5])).toBe(0.5)
   })
-  it('locks / activates / completes units', () => {
+  it('every unit is open; completed = at least bronze', () => {
     const levels = [[3, 3, 3, 3], [0, 0, 0, 0], [0, 0]]
     expect(unitStatus(levels, 0)).toBe('completed')
-    expect(unitStatus(levels, 1)).toBe('active')
-    expect(unitStatus(levels, 2)).toBe('locked')
-    expect(unitStatus([[1, 0, 0, 0], [0]], 1)).toBe('locked')
-    expect(unitStatus([[1, 1, 1, 0, 1], [0]], 1)).toBe('active')
-    expect(unitStatus([[0, 0]], 0)).toBe('active')
-    expect(unitStatus([], 0)).toBe('active')
+    expect(unitStatus(levels, 1)).toBe('open')
+    expect(unitStatus(levels, 2)).toBe('open')
+    expect(unitStatus([[1, 0, 0, 0], [0]], 1)).toBe('open')
+    expect(unitStatus([], 0)).toBe('open')
   })
 })
 

@@ -2,8 +2,7 @@ import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { groupByCourse, sortDecks } from '../core/decks'
-import { HEART_REFILL_MS, conjTier, crownFor, refillHearts, unitMastery, unitStatus, type UnitStatus } from '../core/gamification'
-import { allVerbsUnlocked, stagesPassed } from '../core/conjugation'
+import { HEART_REFILL_MS, verbCrown, crownFor, refillHearts, unitMastery, unitStatus, type UnitStatus } from '../core/gamification'
 import { isDue, personStrengths } from '../core/srs'
 import { levelOf } from '../core/srs'
 import { Crowns, Mascot, Sheet } from '../components/ui'
@@ -42,6 +41,8 @@ export default function Home() {
       status: unitStatus(byUnit, i),
     }))
   }, [words, progress])
+
+  const nextIndex = units.findIndex((u) => u.status !== 'completed')
 
   if (!decks || !words || !progress) return null
 
@@ -103,17 +104,17 @@ export default function Home() {
         {units.map((u, i) => {
           const offset = Math.round(Math.sin(i * 1.1) * 70)
           const crown = crownFor(u.mastery)
-          const locked = u.status === 'locked'
+          const isNext = i === nextIndex
           return (
             <li key={u.index} style={{ transform: `translateX(${offset}px)` }} className="flex flex-col items-center">
               <motion.button
                 whileTap={{ scale: 0.92 }} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ delay: Math.min(i, 8) * 0.04 }}
-                disabled={locked} onClick={() => setOpenUnit(u.index)} data-testid={`unit-${u.index}`} data-status={u.status}
+                onClick={() => setOpenUnit(u.index)} data-testid={`unit-${u.index}`} data-status={isNext ? 'next' : u.status}
                 className={`relative flex h-20 w-20 items-center justify-center rounded-full border-b-8 text-2xl font-black text-white ${nodeColor(u.status)}`}
                 aria-label={`${t('home.unit', { n: u.index + 1 })} (${u.status})`}
               >
-                {locked ? '🔒' : u.status === 'completed' ? '★' : u.index + 1}
-                {u.status === 'active' && (
+                {u.status === 'completed' ? '★' : u.index + 1}
+                {isNext && (
                   <motion.span className="absolute -top-2 rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-brand shadow" animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 1.4 }}>
                     {t('home.start').toUpperCase()}
                   </motion.span>
@@ -132,7 +133,7 @@ export default function Home() {
           <ul className="grid grid-cols-3 gap-3">
             {words.filter((w) => w.verb?.present).map((v) => {
               const p = progress.get(v.id)
-              const tier = conjTier(stagesPassed(p?.conj), p ? personStrengths(p, now) : [])
+              const tier = verbCrown(p ? personStrengths(p, now) : [])
               return (
                 <li key={v.id}>
                   <button className="card flex w-full flex-col items-center gap-1 !p-2" onClick={() => nav(`/conj/${deck.id}/${v.id}`)} data-testid={`conj-node-${v.term}`}>
@@ -143,14 +144,9 @@ export default function Home() {
               )
             })}
             <li>
-              {(() => {
-                const unlocked = allVerbsUnlocked(words.filter((w) => w.verb?.present).map((w) => stagesPassed(progress.get(w.id)?.conj)))
-                return (
-                  <button className={`card flex h-full w-full flex-col items-center justify-center gap-1 !p-2 ${unlocked ? '' : 'opacity-50'}`} onClick={() => nav(`/conj/${deck.id}/all`)} data-testid="conj-node-all">
-                    <span className="text-sm font-black">{unlocked ? '★' : '🔒'} {t('conj.allVerbs')}</span>
-                  </button>
-                )
-              })()}
+              <button className="card flex h-full w-full flex-col items-center justify-center gap-1 !p-2" onClick={() => nav(`/conj/${deck.id}/all`)} data-testid="conj-node-all">
+                <span className="text-sm font-black">★ {t('conj.allVerbs')}</span>
+              </button>
             </li>
           </ul>
         </section>
@@ -174,7 +170,6 @@ export default function Home() {
 }
 
 function nodeColor(s: UnitStatus): string {
-  if (s === 'locked') return 'bg-slate-300 border-slate-400'
   if (s === 'completed') return 'bg-amber-400 border-amber-600'
   return 'bg-brand border-brand-dark'
 }

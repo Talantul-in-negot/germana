@@ -5,7 +5,6 @@ import {
 } from '../core/gamification'
 import { uid } from '../core/id'
 import type { LessonMode, LessonResultItem } from '../core/lesson'
-import { markPassed } from '../core/conjugation'
 import { applyPersonAnswer, applySkillAnswer, dayKey, dueNow, effectiveLevel, requiredSkills } from '../core/srs'
 import type { Level, Profile, SessionLog, TestExtra, TestResult, TestWordResult, Word } from '../core/types'
 import { db } from './db'
@@ -27,10 +26,7 @@ export interface FinishInput {
   now: number
   mode: LessonMode
   heartsLost: number
-  /** XP lost for peeking at the conjugation card */
-  xpPenalty?: number
   /** a Conjugare stage finished: record the pass date on the verb */
-  conj?: { wordId: string; stage: 1 | 2 | 3; passed: boolean }
 }
 
 export interface FinishOutput {
@@ -105,11 +101,6 @@ export async function finishLesson(input: FinishInput): Promise<FinishOutput> {
       state.set(r.wordId, cur)
       xp += xpForAnswer(r.type, r.correct, r.quality)
     }
-    if (input.conj?.passed) {
-      const target = state.get(input.conj.wordId) ?? progressOrNew(state, input.profileId, input.conj.wordId)
-      state.set(input.conj.wordId, { ...target, conj: markPassed(target.conj, input.conj.stage, dayKey(input.now)) })
-    }
-    xp = Math.max(0, xp - (input.xpPenalty ?? 0))
     const correct = input.results.filter((r) => r.correct).length
     const accuracy = input.results.length ? correct / input.results.length : 1
     const perfect = input.results.length >= 5 && correct === input.results.length

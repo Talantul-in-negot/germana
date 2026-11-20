@@ -1,12 +1,12 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import {
-  allVerbsUnlocked, analyzeSentence, answerItem, buildStageItems, canPassStage, checkForm, currentItem, distinctForms, isRegularPresent,
-  markPassed, newConj, pickPairs, rewriteSentence, runFinished, sentencesOf, splitEnding, stagePassed, stageUnlocked, stagesPassed, startRun,
+  analyzeSentence, answerItem, buildStageItems, checkForm, currentItem, distinctForms, isRegularPresent,
+  pickPairs, rewriteSentence, runFinished, sentencesOf, splitEnding, startRun,
   type ConjItem,
 } from '../src/core/conjugation'
 import { buildExercise, chooseTypeFor, evaluateChoice, evaluateTyped, verbOptions, type ChoiceExercise, type MatchExercise, type TypeExercise } from '../src/core/exercises'
-import { conjTier, verbCrown } from '../src/core/gamification'
+import { verbCrown } from '../src/core/gamification'
 import { parsePresentTable, parseVerbForms } from '../src/core/german'
 import { seededRng } from '../src/core/id'
 import { assignUnitsFor } from '../src/core/units'
@@ -267,13 +267,7 @@ describe('Conjugare stages', () => {
     run = answerItem(run, true)
     expect(runFinished(run)).toBe(true)
     expect(run.attempts.filter((a) => a.firstTry)).toHaveLength(6)
-    expect(stagePassed(run)).toBe(true) // 5/6 first-try correct
-  })
-  it('passing needs >= 5/6; 4/6 fails', () => {
-    let run = startRun(buildStageItems(haben, V, 1, seededRng(1)))
-    for (let i = 0; i < 6; i++) run = answerItem(run, i >= 2) // persons 0 and 1 wrong
-    while (!runFinished(run)) run = answerItem(run, true)
-    expect(stagePassed(run)).toBe(false)
+    expect(run.attempts.filter((a) => a.firstTry && a.correct)).toHaveLength(5) // 5 of 6 right on the first try
   })
   it('a person with two rows (stage 2) counts as correct only if both first tries were right', () => {
     let run = startRun(buildStageItems(lernen, V, 2, seededRng(5)))
@@ -285,32 +279,9 @@ describe('Conjugare stages', () => {
       run = answerItem(run, !wrongOnce)
     }
     expect(run.personOk[0]).toBe(false)
-    expect(stagePassed(run)).toBe(true) // 5 other persons are fine
+    expect(Object.values(run.personOk).filter(Boolean)).toHaveLength(5) // 5 other persons are fine
   })
-  it('after stage 1 on a given day, stage 2 opens only on a later day; a stage is not passed twice a day', () => {
-    const d1 = '2026-01-01'
-    const d2 = '2026-01-02'
-    let c = newConj()
-    expect(stageUnlocked(c, 1, d1)).toBe(true)
-    expect(stageUnlocked(c, 2, d1)).toBe(false)
-    expect(canPassStage(c, 1, d1)).toBe(true)
-    c = markPassed(c, 1, d1)
-    expect(c.passed).toEqual([d1, null, null])
-    expect(stageUnlocked(c, 2, d1)).toBe(false)
-    expect(canPassStage(c, 1, d1)).toBe(false)
-    expect(markPassed(c, 2, d1).passed[1]).toBeNull() // cannot be recorded the same day
-    expect(stageUnlocked(c, 2, d2)).toBe(true)
-    c = markPassed(c, 2, d2)
-    expect(c.passed).toEqual([d1, d2, null])
-    expect(stageUnlocked(c, 3, d2)).toBe(false)
-    expect(stageUnlocked(c, 3, '2026-01-03')).toBe(true)
-    expect(stagesPassed(c)).toBe(2)
-    expect(stagesPassed(undefined)).toBe(0)
-    expect(stageUnlocked(undefined, 2, d2)).toBe(false)
-  })
-  it('"Toate verbele" unlocks with 3 verbs at silver; 20 random (verb, person) pairs', () => {
-    expect(allVerbsUnlocked([2, 2, 1, 3])).toBe(true)
-    expect(allVerbsUnlocked([2, 2, 1, 1])).toBe(false)
+  it('"Toate verbele": 20 random (verb, person) pairs, available from the start', () => {
     const pairs = pickPairs(['a', 'b', 'c'], seededRng(2))
     expect(pairs).toHaveLength(20)
     expect(pairs.every((p) => ['a', 'b', 'c'].includes(p.verbId) && p.person >= 0 && p.person < 6)).toBe(true)
@@ -364,17 +335,12 @@ describe('per-person progress', () => {
   it('requires the forms sub-skill for verbs with a present table', () => {
     expect(requiredSkills(verb('haben'))).toEqual(['forms'])
   })
-  it('verb crown: average strength of the 6 persons, no gold while any person is below 60%', () => {
+  it('verb crown: average strength of the 6 persons, no cap', () => {
     expect(verbCrown([90, 90, 90, 90, 90, 90])).toBe(3)
-    expect(verbCrown([100, 100, 100, 100, 100, 50])).toBe(2)
+    expect(verbCrown([100, 100, 100, 100, 100, 50])).toBe(3) // gold from the average, even with one weak person
     expect(verbCrown([70, 70, 70, 70, 70, 70])).toBe(2)
     expect(verbCrown([20, 20, 20, 20, 20, 20])).toBe(0)
     expect(verbCrown([])).toBe(0)
-    expect(conjTier(3, [90, 90, 90, 90, 90, 90])).toBe(3)
-    expect(conjTier(3, [90, 90, 90, 90, 90, 40])).toBe(2)
-    expect(conjTier(1, [90, 90, 90, 90, 90, 90])).toBe(1)
-    expect(conjTier(0, [])).toBe(0)
-    expect(conjTier(3, [])).toBe(2)
   })
 })
 
@@ -387,7 +353,7 @@ describe('Dexie v2 -> v3 migration keeps progress', () => {
     old.close()
     const again = new LexiDB(name)
     await again.open()
-    expect(again.verno).toBe(4)
+    expect(again.verno).toBe(5)
     const row = (await again.progress.get(['p', 'w']))!
     expect(row.level).toBe(4)
     expect(row.interval).toBe(9)

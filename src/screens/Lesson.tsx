@@ -58,7 +58,6 @@ export default function Lesson() {
   const started = useRef(false)
   const levels = useRef<Map<string, number>>(new Map())
   const shownCards = useRef<Set<string>>(new Set())
-  const peeks = useRef(0)
 
   const heartsOn = s.hearts && mode !== 'review'
   const speakOn = s.speaking && sttSupported()
@@ -151,7 +150,7 @@ export default function Lesson() {
       setPhase('saving')
       const out = await finishLesson({
         profileId: profile.id, deckId, sessionId: sessionId.current, results: final.results, startedAt: startedAt.current,
-        now: Date.now(), mode, heartsLost: lost, xpPenalty: peeks.current * 2,
+        now: Date.now(), mode, heartsLost: lost,
       })
       setResult(out)
       setLevelUps(out.levelUps)
@@ -234,8 +233,8 @@ export default function Lesson() {
   if (!rt || !ex) return null
   const feedback = phase === 'feedback' && outcome
   const word = words.current.find((w) => w.id === ex.wordId)
-  // levels 0-2: peeking at the card is possible (and costs a little XP); hidden from level 3
-  const peekable = !!word && hasPresent(word) && (levels.current.get(word.id) ?? 0) <= 2
+  // the conjugation card is always available (free)
+  const peekable = !!word && hasPresent(word)
 
   return (
     <div className="mx-auto flex h-full max-w-lg flex-col">
@@ -245,8 +244,8 @@ export default function Lesson() {
           <motion.div className="h-full rounded-full bg-good" animate={{ width: `${Math.max(4, progressRatio(rt) * 100)}%` }} />
         </div>
         {peekable && (
-          <button aria-label={t('conj.peek', { n: 2 })} title={t('conj.peek', { n: 2 })} className="rounded-full bg-sky-100 px-2.5 py-0.5 text-lg font-black text-sky-700"
-            data-testid="peek-card" onClick={() => { peeks.current += 1; setCard(word as Word) }}>ⓘ</button>
+          <button aria-label={t('conj.peek')} title={t('conj.peek')} className="rounded-full bg-sky-100 px-2.5 py-0.5 text-lg font-black text-sky-700"
+            data-testid="peek-card" onClick={() => setCard(word as Word)}>ⓘ</button>
         )}
         {heartsOn && <span className="font-black text-bad">❤ {hearts}</span>}
       </header>

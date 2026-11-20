@@ -321,7 +321,7 @@ export function effectiveLevel(p: WordProgress): Level {
 
 function asWordProgress(base: WordProgress, st: SkillProgress | undefined): WordProgress {
   const fresh = newProgress(base.profileId, base.wordId)
-  return { ...fresh, ...(st ?? {}), skills: undefined, required: undefined, persons: undefined, conj: undefined } as WordProgress
+  return { ...fresh, ...(st ?? {}), skills: undefined, required: undefined, persons: undefined } as WordProgress
 }
 
 /** Apply one answer to a sub-skill (same SRS rules as `applyAnswer`). */
@@ -355,11 +355,10 @@ export function applyPersonAnswer(prev: WordProgress, person: number, a: AnswerI
 }
 
 function stripState(p: WordProgress): SkillProgress {
-  const { skills: _s, required: _r, persons: _p, conj: _c, ...state } = p
+  const { skills: _s, required: _r, persons: _p, ...state } = p
   void _s
   void _r
   void _p
-  void _c
   return state
 }
 

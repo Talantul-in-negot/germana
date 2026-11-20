@@ -105,16 +105,11 @@ export function crownFor(mastery: number): Crown {
   return c
 }
 
-export type UnitStatus = 'locked' | 'active' | 'completed'
+export type UnitStatus = 'open' | 'completed'
 
-/** Unit N+1 unlocks when >= 80% of unit N has been seen; completed = at least bronze. */
+/** Every unit is open from the start; completed = at least bronze. */
 export function unitStatus(unitLevels: readonly number[][], index: number): UnitStatus {
-  const levels = unitLevels[index] ?? []
-  if (crownFor(unitMastery(levels)) >= 1) return 'completed'
-  if (index === 0) return 'active'
-  const prev = unitLevels[index - 1] ?? []
-  const seen = prev.filter((l) => l >= 1).length
-  return prev.length > 0 && seen / prev.length >= 0.8 ? 'active' : 'locked'
+  return crownFor(unitMastery(unitLevels[index] ?? [])) >= 1 ? 'completed' : 'open'
 }
 
 // ---------- achievements ----------
@@ -158,20 +153,8 @@ export function newlyUnlocked(stats: AchievementStats, already: ReadonlySet<stri
 
 // ---------- verbs: crowns from the 6 persons ----------
 
-export const GOLD_MIN_PERSON_STRENGTH = 60
-
-/** A verb's crown uses the average strength of its 6 persons; no gold while any person is below 60%. */
+/** A verb's crown comes from the average strength of its 6 persons. */
 export function verbCrown(personStrengths: readonly number[]): Crown {
   if (personStrengths.length === 0) return 0
-  const avg = personStrengths.reduce((a, b) => a + b, 0) / personStrengths.length
-  let tier = crownFor(avg / 100)
-  if (tier === 3 && Math.min(...personStrengths) < GOLD_MIN_PERSON_STRENGTH) tier = 2
-  return tier
-}
-
-/** Crown of a verb's "Conjugare" node: stages passed (bronze/silver/gold), gold also needs every person >= 60%. */
-export function conjTier(stagesPassed: number, personStrengths: readonly number[]): Crown {
-  let tier = Math.min(3, Math.max(0, stagesPassed)) as Crown
-  if (tier === 3 && Math.min(...(personStrengths.length ? personStrengths : [0])) < GOLD_MIN_PERSON_STRENGTH) tier = 2
-  return tier
+  return crownFor(personStrengths.reduce((a, b) => a + b, 0) / personStrengths.length / 100)
 }

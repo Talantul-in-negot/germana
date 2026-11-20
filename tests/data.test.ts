@@ -160,3 +160,26 @@ describe('v4 cleanup of content the learner did not supply', () => {
     expect((await db.progress.toArray()).map((x) => x.wordId).sort()).toEqual(['mine-der Hund', 'wt-der Montag'])
   })
 })
+
+describe('v5: stage locks are gone', () => {
+  it('drops the obsolete stage-pass dates from saved progress and keeps the rest', async () => {
+    const { default: Dexie } = await import('dexie')
+    const { newProgress } = await import('../src/core/srs')
+    const { LexiDB } = await import('../src/data/db')
+    const name = 'mig-v5'
+    const v4 = new Dexie(name)
+    v4.version(4).stores({
+      decks: 'id', words: 'id, deckId, [deckId+unitIndex]', profiles: 'id', progress: '[profileId+wordId], profileId, wordId',
+      sessions: 'id, profileId, date', achievements: 'id, profileId, &[profileId+key]', meta: 'key', tests: 'id, profileId, deckId',
+    })
+    await v4.open()
+    await v4.table('progress').add({ ...newProgress('p', 'w'), level: 3, conj: { passed: ['2026-01-01', null, null] } })
+    v4.close()
+    const now = new LexiDB(name)
+    await now.open()
+    const row = (await now.progress.get(['p', 'w'])) as unknown as Record<string, unknown>
+    expect(row.level).toBe(3)
+    expect('conj' in row).toBe(false)
+    now.close()
+  })
+})

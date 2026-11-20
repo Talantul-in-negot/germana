@@ -69,6 +69,14 @@ export class LexiDB extends Dexie {
       .upgrade(async (tx) => {
         await cleanSeedContent(tx.table('decks'), tx.table('words'), tx.table('progress'))
       })
+    // v5: no locks or time gates any more; the stage-pass dates (`conj`) of Conjugare are obsolete.
+    this.version(5)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx.table('progress').toCollection().modify((p: Record<string, unknown>) => {
+          delete p.conj
+        })
+      })
   }
 }
 

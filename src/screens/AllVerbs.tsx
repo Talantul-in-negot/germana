@@ -1,7 +1,7 @@
 /** "Toate verbele": 20 random (verb, person) pairs from the verbs learned so far. */
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { PERSONS, allFormsFor, allVerbsUnlocked, pickPairs, stagesPassed, type ConjItem, type Pair } from '../core/conjugation'
+import { PERSONS, allFormsFor, pickPairs, type ConjItem, type Pair } from '../core/conjugation'
 import { uid } from '../core/id'
 import type { LessonResultItem } from '../core/lesson'
 import { effectiveLevel } from '../core/srs'
@@ -14,7 +14,7 @@ import { finishLesson, type FinishOutput } from '../data/service'
 import { t } from '../i18n'
 import { playSfx } from '../lib/sound'
 
-type Phase = 'loading' | 'locked' | 'intro' | 'run' | 'saving' | 'result'
+type Phase = 'loading' | 'intro' | 'run' | 'saving' | 'result'
 
 export default function AllVerbs() {
   const { deckId = '' } = useParams()
@@ -41,8 +41,8 @@ export default function AllVerbs() {
       const prog = new Map<string, WordProgress>((await db.progress.where('profileId').equals(profile.id).toArray()).map((p) => [p.wordId, p]))
       setAll(ws)
       setVerbs(vs)
-      setSeen(vs.filter((v) => (prog.get(v.id)?.persons?.length ?? 0) > 0 || stagesPassed(prog.get(v.id)?.conj) > 0 || (prog.get(v.id)?.level ?? 0) > 0))
-      setPhase(allVerbsUnlocked(vs.map((v) => stagesPassed(prog.get(v.id)?.conj))) ? 'intro' : 'locked')
+      setSeen(vs.filter((v) => (prog.get(v.id)?.persons?.length ?? 0) > 0 || (prog.get(v.id)?.level ?? 0) > 0))
+      setPhase('intro')
       setLevels(new Map(vs.map((v) => [v.id, prog.get(v.id) ? effectiveLevel(prog.get(v.id) as WordProgress) : 0])))
     })()
   }, [deckId, profile.id])
@@ -92,15 +92,15 @@ export default function AllVerbs() {
   }
 
   if (phase === 'loading' || phase === 'saving') return <div className="flex h-full items-center justify-center font-bold">{t('app.loading')}</div>
-  if (phase === 'locked' || phase === 'intro') {
+  if (phase === 'intro') {
     return (
       <div className="mx-auto flex h-full max-w-lg flex-col items-center justify-center gap-4 p-6 text-center" data-testid="allverbs-intro">
         <Mascot size={100} />
         <h1 className="text-2xl font-black">{t('conj.allVerbs')}</h1>
-        <p className="text-slate-600">{phase === 'locked' ? t('conj.allVerbsLocked') : t('conj.allVerbsHelp')}</p>
+        <p className="text-slate-600">{verbs.length === 0 ? t('conj.noVerbs') : t('conj.allVerbsHelp')}</p>
         <div className="flex w-full gap-3">
           <button className="btn btn-ghost flex-1" onClick={() => nav(-1)}>{t('common.back')}</button>
-          <button className="btn btn-primary flex-1" disabled={phase === 'locked'} onClick={start} data-testid="allverbs-start">{t('drill.start')}</button>
+          <button className="btn btn-primary flex-1" disabled={verbs.length === 0} onClick={start} data-testid="allverbs-start">{t('drill.start')}</button>
         </div>
       </div>
     )

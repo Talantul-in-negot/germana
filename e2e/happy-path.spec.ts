@@ -85,7 +85,7 @@ test('import 50 lines -> 5 units; play a lesson; progress survives reload', asyn
 
   // --- import 50 lines
   await page.getByRole('link', { name: 'Pachete' }).click()
-  await expect(page.getByTestId('deck-card')).toHaveCount(7) // the German demo lessons
+  await expect(page.getByTestId('deck-card')).toHaveCount(6) // the shipped lessons
   await page.getByTestId('new-deck').click()
   await page.getByTestId('deck-name').fill('Test 50')
   await page.getByTestId('paste-box').fill(LINES.join('\n'))
@@ -164,14 +164,18 @@ test('app launches offline after the first visit', async ({ page, context }) => 
   await context.setOffline(false)
 })
 
-test('Conjugare haben: stage 1 with a repeated wrong row; stage 2 stays locked on the same day', async ({ page }) => {
+test('Conjugare haben: stage 1 with a repeated wrong row; every stage is open at once', async ({ page }) => {
   await stubSpeech(page)
   await page.goto('/')
   await page.getByRole('link', { name: 'Pachete' }).click()
   await page.locator('[data-testid="deck-card"]', { hasText: 'Verben' }).getByRole('link').first().click()
   await page.getByTestId('conj-btn-haben').click()
   await expect(page.getByTestId('conj-menu')).toBeVisible()
-  await expect(page.getByTestId('stage-2')).toHaveAttribute('data-state', 'locked')
+  await page.getByTestId('stage-2').click()
+  await expect(page.getByTestId('start-stage-2')).toBeEnabled()
+  await page.getByTestId('stage-3').click()
+  await expect(page.getByTestId('start-stage-3')).toBeEnabled()
+  await page.getByTestId('stage-1').click()
   await page.getByTestId('start-stage-1').click()
 
   const haben: Record<string, string> = { ich: 'habe', du: 'hast', 'er/sie/es': 'hat', wir: 'haben', ihr: 'habt', 'Sie/sie': 'haben' }
@@ -203,9 +207,8 @@ test('Conjugare haben: stage 1 with a repeated wrong row; stage 2 stays locked o
   expect(order.slice(0, 6)).toEqual(['ich', 'du', 'er/sie/es', 'wir', 'ihr', 'Sie/sie'])
   expect(order).toHaveLength(7)
   expect(order[6]).toBe('du')
-  await expect(page.getByTestId('conj-result')).toContainText('Etapă trecută')
+  await expect(page.getByTestId('conj-result')).toContainText('Bravo!')
   await page.getByTestId('conj-back').click()
-  await expect(page.getByTestId('stage-1')).toHaveAttribute('data-state', 'passed')
-  await expect(page.getByTestId('stage-2')).toHaveAttribute('data-state', 'locked') // opens on a later day
-  await expect(page.getByTestId('start-stage-2')).toBeDisabled()
+  await page.getByTestId('stage-2').click()
+  await expect(page.getByTestId('start-stage-2')).toBeEnabled()
 })

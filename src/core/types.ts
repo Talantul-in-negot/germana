@@ -145,13 +145,11 @@ export interface WordProgress {
   skills?: Partial<Record<Exclude<SubSkill, 'meaning'>, SkillProgress>>
   /** present-tense verbs: one SRS state per person (ich … Sie/sie) for the forms sub-skill */
   persons?: SkillProgress[]
-  /** "Conjugare" stages: date each of the 3 stages was first passed */
-  conj?: { passed: (string | null)[] }
   /** sub-skills this word requires besides meaning (derived from the word) */
   required?: Exclude<SubSkill, 'meaning'>[]
 }
 
-export type SkillProgress = Omit<WordProgress, 'skills' | 'required' | 'persons' | 'conj'>
+export type SkillProgress = Omit<WordProgress, 'skills' | 'required' | 'persons'>
 
 export interface ProfileSettings {
   ttsVoice: string | null
