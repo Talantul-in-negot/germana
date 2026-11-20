@@ -11,7 +11,9 @@ import type { LessonResultItem } from '../core/lesson'
 import { personStrengths } from '../core/srs'
 import type { ExerciseType, Word, WordProgress } from '../core/types'
 import { ConjRow } from '../components/ConjRow'
-import { Crowns, Mascot } from '../components/ui'
+import { Crowns } from '../components/ui'
+import { CelebratingPair, CelebrationLayer, CornerAnimal } from '../components/ZoneScreen'
+import { useReactionMood, type Verdict } from '../components/useReactionMood'
 import { db } from '../data/db'
 import { useProfile } from '../data/profile-context'
 import { finishLesson, type FinishOutput } from '../data/service'
@@ -34,6 +36,8 @@ export default function Conj() {
   const [run, setRun] = useState<ConjRun | null>(null)
   const [cardOpen, setCardOpen] = useState(false)
   const [outcome, setOutcome] = useState<{ out: FinishOutput; firstTry: number } | null>(null)
+  const [verdict, setVerdict] = useState<Verdict>(null)
+  const mood = useReactionMood(verdict)
   const sessionId = useRef(uid())
   const started = useRef(0)
 
@@ -98,21 +102,24 @@ export default function Conj() {
     const total = run.queue.length
     return (
       <div className="mx-auto flex h-full max-w-lg flex-col">
-        <header className="flex items-center gap-3 px-4 pt-4">
-          <button aria-label={t('lesson.exit')} className="text-2xl font-black text-slate-400" onClick={() => setPhase('menu')}>✕</button>
+        <header className="ex-bar">
+          <button aria-label={t('lesson.exit')} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl font-black text-slate-600" onClick={() => setPhase('menu')}>✕</button>
           <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-200" role="progressbar">
             <div className="h-full rounded-full bg-good transition-all" style={{ width: `${Math.max(4, (run.cursor / total) * 100)}%` }} />
           </div>
-          <span className="text-sm font-black text-slate-500">{verb.term}</span>
+          <span className="text-sm font-black text-slate-600">{verb.term}</span>
+          <CornerAnimal mood={mood} />
         </header>
         <main className="flex-1 overflow-y-auto px-4 pb-10 pt-6">
+          <div className="panel">
           <h2 className="mb-4 text-lg font-black text-slate-600">{t(`conj.stage${stage}` as Key)}</h2>
           {stage !== 1 && (
             <button className="btn btn-ghost mb-3 !px-3 !py-1.5 !text-sm" onClick={() => setCardOpen((v) => !v)} data-testid="toggle-card">
               {cardOpen ? t('conj.hideCard') : t('conj.showCard')}
             </button>
           )}
-          <ConjRow key={item.id + run.cursor} item={item} verb={verb} showCard={stage === 1 || cardOpen} onDone={(c) => onDone(c)} />
+          <ConjRow key={item.id + run.cursor} item={item} verb={verb} showCard={stage === 1 || cardOpen} onDone={(c) => onDone(c)} onVerdict={setVerdict} />
+          </div>
         </main>
       </div>
     )
@@ -120,8 +127,9 @@ export default function Conj() {
 
   if (phase === 'result' && outcome) {
     return (
-      <div className="mx-auto flex h-full max-w-lg flex-col items-center justify-center gap-3 p-6 text-center" data-testid="conj-result">
-        <Mascot size={100} mood="cheer" />
+      <div className="panel screen-panel flex flex-col items-center justify-center gap-3 !p-6 text-center" data-testid="conj-result">
+        <CelebrationLayer />
+        <CelebratingPair size={84} />
         <h1 className="text-2xl font-black">{t('conj.done')}</h1>
         <p className="font-bold text-slate-600">{t('conj.firstTry', { n: outcome.firstTry })}</p>
         <p className="font-bold text-brand">+{outcome.out.xp + outcome.out.bonusXp} XP</p>
@@ -135,7 +143,7 @@ export default function Conj() {
 
   const tier = verbCrown(strengths)
   return (
-    <div className="mx-auto h-full max-w-lg overflow-y-auto p-5 pb-12" data-testid="conj-menu">
+    <div className="panel screen-panel overflow-y-auto !p-5 pb-12" data-testid="conj-menu">
       <button className="mb-2 text-sm font-bold text-brand" onClick={() => nav(-1)}>← {t('common.back')}</button>
       <div className="mb-1 flex items-center justify-between">
         <h1 className="text-2xl font-black">{t('conj.title')} · {verb.term}</h1>

@@ -90,6 +90,7 @@ export const ro = {
   'lesson.skipSpeak': 'Sari peste',
   'lesson.correct': 'Corect!',
   'lesson.wrong': 'Nu chiar…',
+  'lesson.tryAgain': 'Încearcă din nou!',
   'lesson.answer': 'Răspuns corect:',
   'lesson.diacritics': 'Aproape! Cu diacritice: {a}',
   'lesson.typo': 'Corect, dar atenție la scriere: {a}',

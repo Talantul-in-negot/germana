@@ -16,6 +16,8 @@ import { effectiveLevel, personStrengths, skillLevel } from '../core/srs'
 import { FeedbackBody } from '../components/Feedback'
 import { ExerciseView } from '../components/exercises/ExerciseView'
 import { Confirm, Mascot, Sheet } from '../components/ui'
+import { CornerAnimal } from '../components/ZoneScreen'
+import { useReactionMood, type Verdict } from '../components/useReactionMood'
 import { useProfile } from '../data/profile-context'
 import { db } from '../data/db'
 import { progressMap, updateProfile } from '../data/repo'
@@ -48,6 +50,9 @@ export default function Lesson() {
   const [lang, setLang] = useState<SpeechLang>('de-DE')
   const [cards, setCards] = useState<('days' | 'months')[]>([])
   const [card, setCard] = useState<Word | null>(null)
+
+  const verdict: Verdict = phase === 'feedback' && outcome ? (outcome.correct ? 'correct' : 'wrong') : null
+  const mood = useReactionMood(verdict)
 
   const checkRef = useRef<(() => Outcome) | null>(null)
   const words = useRef<Word[]>([])
@@ -194,7 +199,7 @@ export default function Lesson() {
   }
   if (phase === 'empty' || phase === 'noHearts') {
     return (
-      <div className="mx-auto flex h-full max-w-lg flex-col items-center justify-center gap-4 p-6 text-center">
+      <div className="panel screen-panel flex flex-col items-center justify-center gap-4 !p-6 text-center">
         <Mascot size={110} mood="sad" />
         <p className="text-xl font-black">{phase === 'empty' ? t('lesson.nothing') : t('lesson.noHeartsTitle')}</p>
         {phase === 'noHearts' && <p>{t('home.noHearts')}</p>}
@@ -209,7 +214,7 @@ export default function Lesson() {
   }
   if (phase === 'info') {
     return (
-      <div className="mx-auto flex h-full max-w-lg flex-col justify-center gap-4 p-6" data-testid="info-card">
+      <div className="panel screen-panel flex flex-col justify-center gap-4 !p-6" data-testid="info-card">
         <Mascot size={90} />
         <h1 className="text-2xl font-black">{t('lesson.info')}</h1>
         {cards.map((c) => (
@@ -238,27 +243,28 @@ export default function Lesson() {
 
   return (
     <div className="mx-auto flex h-full max-w-lg flex-col">
-      <header className="flex items-center gap-3 px-4 pt-4">
-        <button aria-label={t('lesson.exit')} className="text-2xl font-black text-slate-400" onClick={() => setExit(true)}>✕</button>
+      <header className="ex-bar">
+        <button aria-label={t('lesson.exit')} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl font-black text-slate-600" onClick={() => setExit(true)}>✕</button>
         <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-200" role="progressbar">
           <motion.div className="h-full rounded-full bg-good" animate={{ width: `${Math.max(4, progressRatio(rt) * 100)}%` }} />
         </div>
         {peekable && (
-          <button aria-label={t('conj.peek')} title={t('conj.peek')} className="rounded-full bg-sky-100 px-2.5 py-0.5 text-lg font-black text-sky-700"
+          <button aria-label={t('conj.peek')} title={t('conj.peek')} className="h-12 w-12 shrink-0 rounded-full bg-sky-100 text-lg font-black text-sky-900"
             data-testid="peek-card" onClick={() => setCard(word as Word)}>ⓘ</button>
         )}
-        {heartsOn && <span className="font-black text-bad">❤ {hearts}</span>}
+        {heartsOn && <span className="pill text-bad !shadow-none">❤ {hearts}</span>}
+        <CornerAnimal mood={mood} />
       </header>
 
       <main className="flex-1 overflow-y-auto px-4 pb-44 pt-6">
         <AnimatePresence mode="wait">
-          <motion.div key={ex.id} initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.18 }}>
+          <motion.div key={ex.id} className="panel" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.18 }}>
             <ExerciseView ex={ex} locked={phase === 'feedback'} outcome={outcome} onReady={onReady} onSubmit={commit} say={say} sayParts={sayParts} lang={lang} />
           </motion.div>
         </AnimatePresence>
       </main>
 
-      <footer className={`fixed inset-x-0 bottom-0 z-30 border-t-2 ${feedback ? (outcome.correct ? 'border-green-200 bg-good-soft' : 'border-red-200 bg-bad-soft') : 'border-slate-100 bg-paper'}`}>
+      <footer className={`fixed inset-x-0 bottom-0 z-30 rounded-t-3xl border-t-4 shadow-soft ${feedback ? (outcome.correct ? 'border-green-200 bg-good-soft' : 'border-red-200 bg-bad-soft') : 'border-slate-100 bg-paper'}`}>
         <div className="mx-auto max-w-lg px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
           {feedback ? (
             <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} data-testid="feedback">

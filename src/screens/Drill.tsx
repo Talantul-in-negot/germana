@@ -8,6 +8,8 @@ import type { LessonResultItem } from '../core/lesson'
 import type { Word } from '../core/types'
 import { ExerciseView } from '../components/exercises/ExerciseView'
 import { FeedbackBody } from '../components/Feedback'
+import { CornerAnimal } from '../components/ZoneScreen'
+import { useReactionMood, type Verdict } from '../components/useReactionMood'
 import { Mascot } from '../components/ui'
 import { db } from '../data/db'
 import { useProfile } from '../data/profile-context'
@@ -48,6 +50,8 @@ export default function Drill() {
   const [items, setItems] = useState<Exercise[]>([])
   const [i, setI] = useState(0)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  const verdict: Verdict = outcome ? (outcome.correct ? 'correct' : 'wrong') : null
+  const mood = useReactionMood(verdict)
   const [canCheck, setCanCheck] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [result, setResult] = useState<FinishOutput | null>(null)
@@ -141,7 +145,7 @@ export default function Drill() {
 
   if (phase === 'intro') {
     return (
-      <div className="mx-auto flex h-full max-w-lg flex-col items-center justify-center gap-4 p-6 text-center">
+      <div className="panel screen-panel flex flex-col items-center justify-center gap-4 !p-6 text-center">
         <Mascot size={110} />
         <h1 className="text-2xl font-black">{t(kind === 'articles' ? 'drill.articlesTitle' : 'drill.numbersTitle')}</h1>
         <p className="text-slate-600">{t(kind === 'articles' ? 'drill.articlesHelp' : 'drill.numbersHelp')}</p>
@@ -164,18 +168,19 @@ export default function Drill() {
   const mm = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
   return (
     <div className="mx-auto flex h-full max-w-lg flex-col">
-      <header className="flex items-center gap-3 px-4 pt-4">
-        <button aria-label={t('lesson.exit')} className="text-2xl font-black text-slate-400" onClick={() => nav(-1)}>✕</button>
+      <header className="ex-bar">
+        <button aria-label={t('lesson.exit')} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl font-black text-slate-600" onClick={() => nav(-1)}>✕</button>
         <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-200" role="progressbar">
           <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${Math.max(4, (i / items.length) * 100)}%` }} />
         </div>
         <span className="text-sm font-black tabular-nums text-slate-600" data-testid="drill-timer">⏱ {mm}</span>
-        <span className="text-sm font-black text-good">{correctSoFar}/{i + (outcome ? 1 : 0)}</span>
+        <span className="text-sm font-black text-green-800">{correctSoFar}/{i + (outcome ? 1 : 0)}</span>
+        <CornerAnimal mood={mood} />
       </header>
       <main className="flex-1 overflow-y-auto px-4 pb-44 pt-6">
-        <ExerciseView key={ex.id} ex={ex} locked={!!outcome} outcome={outcome} onReady={onReady} onSubmit={commit} say={say} lang={lang} />
+        <div className="panel"><ExerciseView key={ex.id} ex={ex} locked={!!outcome} outcome={outcome} onReady={onReady} onSubmit={commit} say={say} lang={lang} /></div>
       </main>
-      <footer className={`fixed inset-x-0 bottom-0 z-30 border-t-2 ${outcome ? (outcome.correct ? 'border-green-200 bg-good-soft' : 'border-red-200 bg-bad-soft') : 'border-slate-100 bg-paper'}`}>
+      <footer className={`fixed inset-x-0 bottom-0 z-30 rounded-t-3xl border-t-4 shadow-soft ${outcome ? (outcome.correct ? 'border-green-200 bg-good-soft' : 'border-red-200 bg-bad-soft') : 'border-slate-100 bg-paper'}`}>
         <div className="mx-auto max-w-lg px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
           {outcome ? (
             <>

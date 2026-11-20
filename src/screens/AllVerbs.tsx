@@ -8,6 +8,8 @@ import { effectiveLevel } from '../core/srs'
 import type { ExerciseType, Word, WordProgress } from '../core/types'
 import { ConjRow } from '../components/ConjRow'
 import { Mascot } from '../components/ui'
+import { CornerAnimal } from '../components/ZoneScreen'
+import { useReactionMood, type Verdict } from '../components/useReactionMood'
 import { db } from '../data/db'
 import { useProfile } from '../data/profile-context'
 import { finishLesson, type FinishOutput } from '../data/service'
@@ -21,6 +23,8 @@ export default function AllVerbs() {
   const nav = useNavigate()
   const { profile } = useProfile()
   const [phase, setPhase] = useState<Phase>('loading')
+  const [verdict, setVerdict] = useState<Verdict>(null)
+  const mood = useReactionMood(verdict)
   const [verbs, setVerbs] = useState<Word[]>([])
   const [seen, setSeen] = useState<Word[]>([])
   const [all, setAll] = useState<Word[]>([])
@@ -94,7 +98,7 @@ export default function AllVerbs() {
   if (phase === 'loading' || phase === 'saving') return <div className="flex h-full items-center justify-center font-bold">{t('app.loading')}</div>
   if (phase === 'intro') {
     return (
-      <div className="mx-auto flex h-full max-w-lg flex-col items-center justify-center gap-4 p-6 text-center" data-testid="allverbs-intro">
+      <div className="panel screen-panel flex flex-col items-center justify-center gap-4 !p-6 text-center" data-testid="allverbs-intro">
         <Mascot size={100} />
         <h1 className="text-2xl font-black">{t('conj.allVerbs')}</h1>
         <p className="text-slate-600">{verbs.length === 0 ? t('conj.noVerbs') : t('conj.allVerbsHelp')}</p>
@@ -108,7 +112,7 @@ export default function AllVerbs() {
   if (phase === 'result' && result) {
     const rowVerbs = [...new Set(pairs.map((p) => p.verbId))].map((id) => verbs.find((v) => v.id === id) as Word)
     return (
-      <div className="mx-auto h-full max-w-lg overflow-y-auto p-5 pb-12" data-testid="allverbs-result">
+      <div className="panel screen-panel overflow-y-auto !p-5 pb-12" data-testid="allverbs-result">
         <h1 className="mb-1 text-2xl font-black">{t('conj.allVerbs')}</h1>
         <p className="mb-4 font-bold text-brand">+{result.xp + result.bonusXp} XP · {Math.round(result.accuracy * 100)}%</p>
         <h2 className="mb-2 font-black">{t('conj.grid')}</h2>
@@ -143,16 +147,19 @@ export default function AllVerbs() {
   if (!item || !verb) return null
   return (
     <div className="mx-auto flex h-full max-w-lg flex-col">
-      <header className="flex items-center gap-3 px-4 pt-4">
-        <button aria-label={t('lesson.exit')} className="text-2xl font-black text-slate-400" onClick={() => nav(-1)}>✕</button>
+      <header className="ex-bar">
+        <button aria-label={t('lesson.exit')} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl font-black text-slate-600" onClick={() => nav(-1)}>✕</button>
         <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-200" role="progressbar">
           <div className="h-full rounded-full bg-good transition-all" style={{ width: `${Math.max(4, (i / items.length) * 100)}%` }} />
         </div>
-        <span className="text-sm font-black text-slate-500">{i + 1}/{items.length}</span>
+        <span className="text-sm font-black text-slate-600">{i + 1}/{items.length}</span>
+        <CornerAnimal mood={mood} />
       </header>
       <main className="flex-1 overflow-y-auto px-4 pb-10 pt-6">
+        <div className="panel">
         <p className="mb-3 text-lg font-black text-slate-600">{verb.term}</p>
-        <ConjRow key={item.id} item={item} verb={verb} onDone={(c) => onDone(c)} />
+        <ConjRow key={item.id} item={item} verb={verb} onDone={(c) => onDone(c)} onVerdict={setVerdict} />
+        </div>
       </main>
     </div>
   )

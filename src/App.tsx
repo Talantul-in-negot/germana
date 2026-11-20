@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
+import Splash from './components/Splash'
+import { ZonedScreen } from './components/ZoneScreen'
 import { ProfileProvider } from './data/profile-context'
 import { ensureSeed } from './data/repo'
-import { t } from './i18n'
 import DeckDetail from './screens/DeckDetail'
 import AllVerbs from './screens/AllVerbs'
 import Conj from './screens/Conj'
@@ -31,17 +32,17 @@ export default function App() {
   useEffect(() => {
     void ensureSeed().then(() => setReady(true))
   }, [])
-  if (!ready) return <div className="flex h-full items-center justify-center font-bold">{t('app.loading')}</div>
+  if (!ready) return <Splash />
   return (
     <HashRouter>
       <ProfileProvider>
         <Routes>
           {DevScenes && <Route path="/dev/scenes" element={<Suspense fallback={null}><DevScenes /></Suspense>} />}
-          <Route path="/lesson/:deckId" element={<KeyedLesson />} />
-          <Route path="/test/:deckId" element={<TestMode />} />
-          <Route path="/conj/:deckId/all" element={<AllVerbs />} />
-          <Route path="/conj/:deckId/:wordId" element={<Conj />} />
-          <Route path="/drill/:deckId" element={<Drill />} />
+          <Route path="/lesson/:deckId" element={<ZonedScreen><KeyedLesson /></ZonedScreen>} />
+          <Route path="/test/:deckId" element={<ZonedScreen><TestMode /></ZonedScreen>} />
+          <Route path="/conj/:deckId/all" element={<ZonedScreen><AllVerbs /></ZonedScreen>} />
+          <Route path="/conj/:deckId/:wordId" element={<ZonedScreen><Conj /></ZonedScreen>} />
+          <Route path="/drill/:deckId" element={<ZonedScreen><Drill /></ZonedScreen>} />
           <Route element={<Layout />}>
             <Route index element={<Home />} />
             <Route path="decks" element={<Decks />} />

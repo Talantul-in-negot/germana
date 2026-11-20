@@ -13,6 +13,7 @@ import { seededRng, shuffle } from '../core/id'
 import type { TestExtra, TestResult, TestWordResult, Word } from '../core/types'
 import { ExerciseView } from '../components/exercises/ExerciseView'
 import { Term } from '../components/Term'
+import { CornerAnimal } from '../components/ZoneScreen'
 import { Confirm } from '../components/ui'
 import { db } from '../data/db'
 import { useProfile } from '../data/profile-context'
@@ -231,7 +232,7 @@ export default function TestMode() {
 
   if (phase === 'intro' || phase === 'result') {
     return (
-      <div className="mx-auto h-full max-w-lg overflow-y-auto p-5 pb-12">
+      <div className="panel screen-panel overflow-y-auto !p-5 pb-12">
         <button className="mb-2 text-sm font-bold text-brand" onClick={() => nav('/decks')}>← {t('common.back')}</button>
         <h1 className="text-2xl font-black">{t('test.title')}</h1>
         <p className="mb-4 text-slate-600">{deckName}</p>
@@ -268,17 +269,18 @@ export default function TestMode() {
   if (!item) return null
   return (
     <div className="mx-auto flex h-full max-w-lg flex-col">
-      <header className="flex items-center gap-3 px-4 pt-4">
-        <button aria-label={t('lesson.exit')} className="text-2xl font-black text-slate-400" onClick={() => setExit(true)}>✕</button>
+      <header className="ex-bar">
+        <button aria-label={t('lesson.exit')} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-2xl font-black text-slate-600" onClick={() => setExit(true)}>✕</button>
         <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-200" role="progressbar">
           <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${Math.max(4, (i / items.length) * 100)}%` }} />
         </div>
-        <span className="text-sm font-black text-slate-500">{t('test.progress', { i: i + 1, n: items.length })}</span>
+        <span className="text-sm font-black text-slate-600">{t('test.progress', { i: i + 1, n: items.length })}</span>
+        <CornerAnimal />
       </header>
       <main className="flex-1 overflow-y-auto px-4 pb-32 pt-6">
-        <ExerciseView key={item.ex.id} ex={item.ex} locked={false} outcome={null} onReady={onReady} onSubmit={() => undefined} say={noSay} />
+        <div className="panel"><ExerciseView key={item.ex.id} ex={item.ex} locked={false} outcome={null} onReady={onReady} onSubmit={() => undefined} say={noSay} /></div>
       </main>
-      <footer className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-slate-100 bg-paper">
+      <footer className="fixed inset-x-0 bottom-0 z-30 rounded-t-3xl border-t-4 border-white bg-paper shadow-soft">
         <div className="mx-auto max-w-lg px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
           <button className="btn btn-primary w-full" disabled={!canCheck} onClick={next} data-testid="test-next">
             {i + 1 >= items.length ? t('test.finish') : t('test.next')}

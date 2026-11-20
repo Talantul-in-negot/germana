@@ -5,7 +5,7 @@ import { useProfile } from '../data/profile-context'
 import { t } from '../i18n'
 import type { NumPart } from '../core/numbers'
 
-export const GENDER_TEXT: Record<Gender, string> = { der: 'text-blue-600', die: 'text-red-600', das: 'text-green-600' }
+export const GENDER_TEXT: Record<Gender, string> = { der: 'text-blue-600', die: 'text-red-600', das: 'text-green-700' }
 export const GENDER_BG: Record<Gender, string> = { der: 'bg-blue-100 border-blue-400 text-blue-800', die: 'bg-red-100 border-red-400 text-red-800', das: 'bg-green-100 border-green-400 text-green-800' }
 
 /** Gender colour toggle from the profile settings (default on). */

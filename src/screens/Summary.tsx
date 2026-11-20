@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import type { LessonMode } from '../core/lesson'
-import { LevelBadge, Mascot } from '../components/ui'
+import { LevelBadge } from '../components/ui'
+import { CelebratingPair, CelebrationLayer } from '../components/ZoneScreen'
 import type { FinishOutput } from '../data/service'
 import { t } from '../i18n'
 import type { Key } from '../i18n'
@@ -20,13 +21,14 @@ export default function Summary({
   const mins = Math.floor(result.durationSec / 60)
   const secs = result.durationSec % 60
   return (
-    <div className="mx-auto flex h-full max-w-lg flex-col overflow-y-auto p-5" data-testid="summary">
+    <div className="panel screen-panel flex flex-col overflow-y-auto !p-5" data-testid="summary">
+      <CelebrationLayer count={result.unlocked.length ? 44 : 28} />
       <div className="flex flex-col items-center gap-2 pt-4 text-center">
         <motion.div initial={{ scale: 0.4, rotate: -10 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 260, damping: 12 }}>
-          <Mascot size={120} mood="cheer" />
+          <CelebratingPair size={96} />
         </motion.div>
         <h1 className="text-3xl font-black">{t('summary.title')}</h1>
-        {result.perfect && <p className="font-extrabold text-amber-600">{t('summary.perfect', { n: result.bonusXp })}</p>}
+        {result.perfect && <p className="font-extrabold text-amber-800">{t('summary.perfect', { n: result.bonusXp })}</p>}
         {result.goalReached && <p className="font-extrabold text-good">{t('summary.goal')}</p>}
       </div>
 

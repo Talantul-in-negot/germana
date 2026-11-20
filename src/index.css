@@ -25,9 +25,9 @@
   --color-slate-100: #f5efe6;
   --color-slate-200: #e8dfd1;
   --color-slate-300: #d3c7b5;
-  --color-slate-400: #a89c8b;
-  --color-slate-500: #766a5c;
-  --color-slate-600: #5a4f43;
+  --color-slate-400: #7d7163;
+  --color-slate-500: #6b6054;
+  --color-slate-600: #54493e;
   --color-slate-700: #463c32;
   --color-slate-800: #30281f;
   --color-slate-900: #1f1913;
@@ -73,3 +73,13 @@ body {
   .choice[data-state="right"] { @apply border-good bg-good-soft text-green-900; }
   .choice[data-state="wrong"] { @apply border-bad bg-bad-soft text-red-900; }
 }
+
+/* Exercise screens: controls live on semi-opaque rounded panels above the (dim) scenery. */
+.ex-bar {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin: 0.75rem 0.75rem 0; padding: 0.25rem 0.5rem 0.25rem 0.25rem;
+  border-radius: 9999px; background: rgb(255 255 255 / 0.9); box-shadow: var(--shadow-soft);
+}
+.ex-corner { width: 3rem; height: 3rem; flex-shrink: 0; }
+/* A full-height rounded white panel for centred / scrolling screens (result, intro, menu). */
+.screen-panel { margin: 0.75rem auto; width: calc(100% - 1.5rem); height: calc(100% - 1.5rem); max-width: 32rem; }

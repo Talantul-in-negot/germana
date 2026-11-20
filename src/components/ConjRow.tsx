@@ -4,19 +4,24 @@ import type { Word } from '../core/types'
 import { t } from '../i18n'
 import { ConjCard, FormText } from './ConjCard'
 import { KeyBar } from './Term'
+import type { Verdict } from './useReactionMood'
 
 /**
  * One conjugation row: a dropdown (stages 1-2) or a typing field (stage 3).
  * Feedback appears right after the row, with the ending highlighted; `onDone` fires on "next".
  */
 export function ConjRow({
-  item, verb, showCard, onDone,
-}: { item: ConjItem; verb: Word; showCard?: boolean; onDone: (correct: boolean, given: string) => void }) {
+  item, verb, showCard, onDone, onVerdict,
+}: { item: ConjItem; verb: Word; showCard?: boolean; onDone: (correct: boolean, given: string) => void; onVerdict?: (v: Verdict) => void }) {
   const [value, setValue] = useState('')
   const [result, setResult] = useState<boolean | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const typing = item.kind === 'typing'
   const irregular = !!verb.verb?.irregular
+
+  useEffect(() => {
+    onVerdict?.(result === null ? null : result ? 'correct' : 'wrong')
+  }, [result, onVerdict])
 
   useEffect(() => {
     setValue('')
@@ -75,6 +80,7 @@ export function ConjRow({
         ) : (
           <>
             <p className={`text-xl font-black ${result ? 'text-green-800' : 'text-red-800'}`}>{result ? t('lesson.correct') : t('lesson.wrong')}</p>
+            {!result && <p className="font-bold text-red-900">{t('lesson.tryAgain')}</p>}
             {!result && (
               <p className="font-bold text-red-900" data-testid="person-note">{t('note.conj', { p: PERSONS[item.person] ?? '', e: item.answer, g: value })}</p>
             )}
