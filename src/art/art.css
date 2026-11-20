@@ -1,0 +1,143 @@
+/* WortPfad illustration system: idle animations. Transform / opacity only.
+   Rule: an element that carries a .wp-* animation must NOT also have a `transform` attribute;
+   position it with a wrapping <g transform> instead. */
+
+.wp-art { display: block; }
+
+/* ---- generic origins (SVG elements measured by their own box) ---- */
+.wp-o-b, .wp-o-t, .wp-o-c, .wp-o-l, .wp-o-r, .wp-o-bl, .wp-o-br, .wp-o-tl, .wp-o-tr { transform-box: fill-box; }
+.wp-o-b { transform-origin: 50% 100%; }
+.wp-o-t { transform-origin: 50% 0%; }
+.wp-o-c { transform-origin: 50% 50%; }
+.wp-o-l { transform-origin: 0% 50%; }
+.wp-o-r { transform-origin: 100% 50%; }
+.wp-o-bl { transform-origin: 0% 100%; }
+.wp-o-br { transform-origin: 100% 100%; }
+.wp-o-tl { transform-origin: 0% 0%; }
+.wp-o-tr { transform-origin: 100% 0%; }
+
+/* ---- motion switches (set from JS: document hidden / reduced motion) ---- */
+[data-motion='none'], [data-motion='none'] * { animation: none !important; }
+[data-motion='paused'] * { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) {
+  .wp-art, .wp-art *, .wp-celebrate, .wp-celebrate * { animation: none !important; transition: none !important; }
+}
+
+/* ---- animal idle ---- */
+/* --ad: per-instance negative delay (set by <Animal>) so neighbours do not blink and breathe in lockstep */
+.wp-breathe { animation: wp-breathe 3.8s ease-in-out var(--ad, 0s) infinite; }
+@keyframes wp-breathe { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(0.992, 1.026); } }
+
+.wp-blink { animation: wp-blink 5.4s var(--ad, 0s) infinite; }
+@keyframes wp-blink { 0%, 93%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(0.08); } }
+
+.wp-ear { --s: 1; transform: translateY(var(--ey, 0px)) rotate(var(--er, 0deg)); animation: wp-twitch 7s infinite; }
+.wp-ear { transform-origin: 50% 100%; transform-box: fill-box; }
+.wp-ear-l { --s: -1; }
+.wp-ear-r { animation-duration: 8.6s; animation-delay: -3.1s; }
+@keyframes wp-twitch {
+  0%, 85%, 100% { transform: translateY(var(--ey, 0px)) rotate(var(--er, 0deg)); }
+  89% { transform: translateY(var(--ey, 0px)) rotate(calc(var(--er, 0deg) + 11deg * var(--s))); }
+  93% { transform: translateY(var(--ey, 0px)) rotate(calc(var(--er, 0deg) - 4deg * var(--s))); }
+}
+
+.wp-wag { animation: wp-wag 1.6s ease-in-out infinite alternate; }
+@keyframes wp-wag { from { transform: rotate(-7deg); } to { transform: rotate(9deg); } }
+
+.wp-wave { animation: wp-wave 9s ease-in-out infinite; }
+@keyframes wp-wave {
+  0%, 78%, 100% { transform: rotate(0deg); }
+  82% { transform: rotate(-26deg); } 86% { transform: rotate(8deg); }
+  90% { transform: rotate(-26deg); } 94% { transform: rotate(6deg); }
+}
+
+.wp-head { animation: wp-head-idle 12s ease-in-out var(--ad, 0s) infinite; }
+@keyframes wp-head-idle { 0%, 84%, 100% { transform: rotate(0deg); } 88%, 95% { transform: rotate(-4.5deg); } }
+
+.wp-float { animation: wp-float 3.6s ease-in-out infinite; }
+@keyframes wp-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+
+.wp-flutter { animation: wp-flutter 0.9s ease-in-out infinite alternate; }
+@keyframes wp-flutter { from { transform: rotate(-9deg); } to { transform: rotate(10deg); } }
+
+/* ---- moods (animated, plus the static pose used when motion is off) ---- */
+.wp-mood { transform-box: fill-box; transform-origin: 50% 100%; }
+.wp-an[data-mood='happy'] .wp-mood { transform: translateY(-4px); animation: wp-hop 1.3s ease-in-out infinite; }
+.wp-an[data-mood='celebrate'] .wp-mood { transform: translateY(-10px); animation: wp-jump 0.95s ease-in-out infinite; }
+.wp-an[data-mood='happy'] .wp-ear, .wp-an[data-mood='celebrate'] .wp-ear { --ey: -3px; --er: calc(8deg * var(--s)); }
+.wp-an[data-mood='celebrate'] .wp-wag { animation-duration: 0.45s; }
+.wp-an[data-mood='encourage'] .wp-head { transform: rotate(-7deg); animation: wp-tilt 3.6s ease-in-out infinite; }
+.wp-an[data-mood='celebrate'] .wp-wave, .wp-an[data-mood='happy'] .wp-wave { animation-duration: 3s; }
+
+@keyframes wp-hop {
+  0%, 100% { transform: translateY(0) scale(1.03, 0.96); }
+  35% { transform: translateY(-9px) scale(0.98, 1.03); }
+  65% { transform: translateY(0) scale(1, 1); }
+}
+@keyframes wp-jump {
+  0%, 100% { transform: translateY(0) scale(1.05, 0.93); }
+  40% { transform: translateY(-22px) scale(0.96, 1.05); }
+  70% { transform: translateY(0) scale(1, 1); }
+}
+@keyframes wp-tilt {
+  0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(-9deg); }
+}
+.wp-spark { animation: wp-twinkle 1.3s ease-in-out infinite; }
+
+/* ---- scene ---- */
+.wp-drift { animation: wp-drift calc(var(--d, 60s) * var(--slow, 1)) ease-in-out infinite alternate; }
+@keyframes wp-drift { from { transform: translateX(-26px); } to { transform: translateX(34px); } }
+
+.wp-twinkle { animation: wp-twinkle calc(var(--d, 3s) * var(--slow, 1)) ease-in-out infinite; }
+@keyframes wp-twinkle { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+
+.wp-sway { animation: wp-sway calc(var(--d, 4s) * var(--slow, 1)) ease-in-out infinite alternate; }
+@keyframes wp-sway { from { transform: rotate(-4deg); } to { transform: rotate(5deg); } }
+
+.wp-shimmer { animation: wp-shimmer calc(var(--d, 5s) * var(--slow, 1)) ease-in-out infinite; }
+@keyframes wp-shimmer { 0%, 100% { opacity: 0; transform: translateX(-8px); } 50% { opacity: 0.85; transform: translateX(8px); } }
+
+.wp-rays { animation: wp-rays calc(var(--d, 14s) * var(--slow, 1)) ease-in-out infinite alternate; }
+@keyframes wp-rays { from { opacity: 0.45; transform: rotate(-1.2deg); } to { opacity: 1; transform: rotate(1.2deg); } }
+
+/* particles: each has a static home position, the animation only offsets it */
+.wp-p { animation-duration: calc(var(--d, 12s) * var(--slow, 1)); animation-timing-function: linear; animation-iteration-count: infinite; }
+.wp-fall { animation-name: wp-fall; }
+@keyframes wp-fall {
+  from { transform: translate(0, calc(-1px * var(--y, 0) - 30px)) rotate(0deg); }
+  to { transform: translate(var(--dx, 40px), calc(680px - 1px * var(--y, 0))) rotate(var(--rot, 300deg)); }
+}
+.wp-rise { animation-name: wp-rise; }
+@keyframes wp-rise {
+  from { transform: translate(0, calc(680px - 1px * var(--y, 0))); opacity: 0; }
+  12% { opacity: 0.85; }
+  85% { opacity: 0.85; }
+  to { transform: translate(var(--dx, 20px), calc(-1px * var(--y, 0) - 30px)); opacity: 0; }
+}
+.wp-wander { animation-name: wp-wander; animation-timing-function: ease-in-out; }
+@keyframes wp-wander {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(var(--dx, 60px), -22px); }
+  50% { transform: translate(calc(var(--dx, 60px) * 0.3), 12px); }
+  75% { transform: translate(calc(var(--dx, 60px) * -0.6), -16px); }
+}
+.wp-glow { animation-name: wp-glow; animation-timing-function: ease-in-out; }
+@keyframes wp-glow {
+  0%, 100% { opacity: 0.1; transform: translate(0, 0); }
+  50% { opacity: 1; transform: translate(var(--dx, 16px), -14px); }
+}
+.wp-flap { animation: wp-flap 0.36s ease-in-out infinite alternate; }
+@keyframes wp-flap { from { transform: scaleX(1); } to { transform: scaleX(0.25); } }
+
+/* ---- celebration overlay (HTML, sized by container units) ---- */
+.wp-celebrate { position: absolute; inset: 0; overflow: hidden; pointer-events: none; container-type: size; }
+.wp-confetti { position: absolute; top: 0; will-change: transform; animation: wp-confetti var(--d, 3s) ease-in var(--delay, 0s) 1 both; }
+@keyframes wp-confetti {
+  from { transform: translate3d(0, -12cqh, 0) rotate(0deg); opacity: 1; }
+  80% { opacity: 1; }
+  to { transform: translate3d(var(--dx, 0px), 108cqh, 0) rotate(var(--rot, 360deg)); opacity: 0; }
+}
+.wp-celebrate[data-motion='none'] .wp-confetti { animation: none; opacity: 0.9; top: var(--top, 20%); }
+@media (prefers-reduced-motion: reduce) {
+  .wp-celebrate .wp-confetti { animation: none !important; opacity: 0.9; top: var(--top, 20%); }
+}
