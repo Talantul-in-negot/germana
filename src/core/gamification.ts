@@ -155,3 +155,23 @@ export const ACHIEVEMENTS: AchievementDef[] = [
 export function newlyUnlocked(stats: AchievementStats, already: ReadonlySet<string>): AchievementDef[] {
   return ACHIEVEMENTS.filter((a) => !already.has(a.key) && a.test(stats))
 }
+
+// ---------- verbs: crowns from the 6 persons ----------
+
+export const GOLD_MIN_PERSON_STRENGTH = 60
+
+/** A verb's crown uses the average strength of its 6 persons; no gold while any person is below 60%. */
+export function verbCrown(personStrengths: readonly number[]): Crown {
+  if (personStrengths.length === 0) return 0
+  const avg = personStrengths.reduce((a, b) => a + b, 0) / personStrengths.length
+  let tier = crownFor(avg / 100)
+  if (tier === 3 && Math.min(...personStrengths) < GOLD_MIN_PERSON_STRENGTH) tier = 2
+  return tier
+}
+
+/** Crown of a verb's "Conjugare" node: stages passed (bronze/silver/gold), gold also needs every person >= 60%. */
+export function conjTier(stagesPassed: number, personStrengths: readonly number[]): Crown {
+  let tier = Math.min(3, Math.max(0, stagesPassed)) as Crown
+  if (tier === 3 && Math.min(...(personStrengths.length ? personStrengths : [0])) < GOLD_MIN_PERSON_STRENGTH) tier = 2
+  return tier
+}

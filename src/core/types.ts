@@ -37,13 +37,27 @@ export type ExerciseType =
   | 'gender_pairs'
   | 'collective'
   | 'possessive'
+  // present-tense conjugation
+  | 'conj_dropdown'
+  | 'conj_dropdown_all'
+  | 'conj_typing'
+  | 'verb_dropdown'
+  | 'verb_pronoun'
+  | 'verb_pronoun_type'
+  | 'verb_endings'
+  | 'verb_listen_blank'
+  | 'verb_sentence_build'
 
 export type WordType = 'noun' | 'verb' | 'other'
 export type Gender = 'der' | 'die' | 'das'
 export type SubSkill = 'meaning' | 'gender' | 'plural' | 'forms'
 export type Cefr = 'A1' | 'A2' | 'B1' | 'B2' | 'C1'
 
+/** Präsens in notebook order: ich, du, er/sie/es, wir, ihr, Sie/sie */
+export type Present = [string, string, string, string, string, string]
+
 export interface VerbInfo {
+  present?: Present
   present3sg?: string
   praeteritum?: string
   perfekt?: string
@@ -88,6 +102,8 @@ export interface Word {
   verb?: VerbInfo
   /** additional accepted German variants (display form, with article for nouns) */
   alternatives?: string[]
+  /** Romanian translation per example sentence (same order as the ` // ` split) */
+  exampleRo?: string[]
   /** numeric value for number words (tag n=21) */
   value?: number
   /** group label for numbers (tag 11-20) */
@@ -127,11 +143,15 @@ export interface WordProgress {
    * Other sub-skills keep their own full SRS state here.
    */
   skills?: Partial<Record<Exclude<SubSkill, 'meaning'>, SkillProgress>>
+  /** present-tense verbs: one SRS state per person (ich … Sie/sie) for the forms sub-skill */
+  persons?: SkillProgress[]
+  /** "Conjugare" stages: date each of the 3 stages was first passed */
+  conj?: { passed: (string | null)[] }
   /** sub-skills this word requires besides meaning (derived from the word) */
   required?: Exclude<SubSkill, 'meaning'>[]
 }
 
-export type SkillProgress = Omit<WordProgress, 'skills' | 'required'>
+export type SkillProgress = Omit<WordProgress, 'skills' | 'required' | 'persons' | 'conj'>
 
 export interface ProfileSettings {
   ttsVoice: string | null

@@ -90,11 +90,17 @@ export function splitTranslations(s: string): string[] {
     .filter(Boolean)
 }
 
+/** Machine tags (n=21, 0-10) may be space separated; any other text is one label ("Sein und Haben"). */
 function splitTags(s: string): string[] {
-  return s
-    .split(/[,|#\s]+/)
-    .map((x) => x.trim().toLowerCase())
-    .filter(Boolean)
+  const out: string[] = []
+  for (const part of s.split(/[,|#]+/)) {
+    const p = part.trim().toLowerCase()
+    if (!p) continue
+    const toks = p.split(/\s+/)
+    if (toks.length > 1 && toks.every((x) => /^(n=\d+|\d+-\d+)$/.test(x))) out.push(...toks)
+    else out.push(p)
+  }
+  return out
 }
 
 /** Parse pasted/imported text. `existingTerms` flags duplicates against an existing deck. */
@@ -150,6 +156,7 @@ export interface JsonWordInput {
   pluralOnly?: boolean
   verb?: VerbInfo
   alternatives?: string[]
+  exampleRo?: string[]
   value?: number
   group?: string
 }
@@ -248,6 +255,7 @@ export function enrichGerman(rawTerm: string, translations: string[], forms: str
     const v = t.match(VALUE_TAG)
     if (v) fields.value = Number(v[1])
     else if (RANGE_TAG.test(t)) fields.group = t
+    else if (/\s/.test(t)) fields.group = t // multi-word label (Sein und Haben): one unit per group
     else if (NAMED_GROUPS.has(t)) {
       fields.group = t
       tags.push(t)

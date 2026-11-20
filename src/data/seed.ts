@@ -108,11 +108,57 @@ die Tante, -n ; mătușa ; ; Wer ist das? – Das ist meine Tante. ; verwandte
 der Cousin, -s ; vărul ; ; Wer ist das? – Das ist mein Cousin. ; verwandte
 die Cousine, -n ; vara ; ; Wer ist das? – Das ist meine Cousine. ; verwandte`
 
+export const VERBEN_DECK_NAME = 'Lektion 6 – Verben (Präsens)'
+export const VERBEN_TEXT = `sein ; a fi ; P: bin, bist, ist, sind, seid, sind ; Ich bin zehn Jahre alt. // Wir sind in der Schule. ; Sein und Haben
+haben ; a avea ; P: habe, hast, hat, haben, habt, haben ; Ich habe einen Bruder. // Er hat eine Schwester. ; Sein und Haben
+lernen ; a învăța ; P: lerne, lernst, lernt, lernen, lernt, lernen ; Du lernst Deutsch. // Wir lernen jeden Tag. ; Regelmäßige Verben
+wohnen ; a locui ; P: wohne, wohnst, wohnt, wohnen, wohnt, wohnen ; Ich wohne in Timișoara. // Meine Oma wohnt auf dem Land. ; Regelmäßige Verben
+spielen ; a juca|a se juca ; P: spiele, spielst, spielt, spielen, spielt, spielen ; Er spielt Fußball. // Ihr spielt im Garten. ; Regelmäßige Verben
+singen ; a cânta ; P: singe, singst, singt, singen, singt, singen ; Sie singt gern. // Wir singen ein Lied. ; Regelmäßige Verben
+kommen ; a veni ; P: komme, kommst, kommt, kommen, kommt, kommen ; Ich komme aus Rumänien. // Woher kommst du? ; Regelmäßige Verben
+gehen ; a merge ; P: gehe, gehst, geht, gehen, geht, gehen ; Ich gehe in die Schule. // Ihr geht nach Hause. ; Regelmäßige Verben
+fragen ; a întreba ; P: frage, fragst, fragt, fragen, fragt, fragen ; Du fragst die Mutter. // Ich frage den Lehrer. ; Regelmäßige Verben
+schreiben ; a scrie ; P: schreibe, schreibst, schreibt, schreiben, schreibt, schreiben ; Ich schreibe einen Brief. // Wir schreiben einen Test. ; Regelmäßige Verben`
+
+/** Romanian translations of the verb example sentences (for "sentence building"). */
+export const VERB_SENTENCE_RO: Record<string, string> = {
+  'Ich bin zehn Jahre alt.': 'Eu am zece ani.',
+  'Wir sind in der Schule.': 'Noi suntem la școală.',
+  'Ich habe einen Bruder.': 'Eu am un frate.',
+  'Er hat eine Schwester.': 'El are o soră.',
+  'Du lernst Deutsch.': 'Tu înveți germană.',
+  'Wir lernen jeden Tag.': 'Noi învățăm în fiecare zi.',
+  'Ich wohne in Timișoara.': 'Eu locuiesc în Timișoara.',
+  'Meine Oma wohnt auf dem Land.': 'Bunica mea locuiește la țară.',
+  'Er spielt Fußball.': 'El joacă fotbal.',
+  'Ihr spielt im Garten.': 'Voi vă jucați în grădină.',
+  'Sie singt gern.': 'Ea cântă cu plăcere.',
+  'Wir singen ein Lied.': 'Noi cântăm un cântec.',
+  'Ich komme aus Rumänien.': 'Eu vin din România.',
+  'Woher kommst du?': 'De unde vii?',
+  'Ich gehe in die Schule.': 'Eu merg la școală.',
+  'Ihr geht nach Hause.': 'Voi mergeți acasă.',
+  'Du fragst die Mutter.': 'Tu o întrebi pe mama.',
+  'Ich frage den Lehrer.': 'Eu îl întreb pe profesor.',
+  'Ich schreibe einen Brief.': 'Eu scriu o scrisoare.',
+  'Wir schreiben einen Test.': 'Noi scriem un test.',
+}
+
+/** Attach known Romanian sentence translations (per ` // ` sentence) to imported items. */
+export function withSentenceTranslations<T extends { example?: string; exampleRo?: string[] }>(items: T[]): T[] {
+  return items.map((it) => {
+    if (!it.example) return it
+    const ro = it.example.split(' // ').map((x) => VERB_SENTENCE_RO[x.trim()] ?? '')
+    return ro.some(Boolean) ? { ...it, exampleRo: ro } : it
+  })
+}
+
 export const GERMAN_SEEDS: SeedLesson[] = [
   { key: 'familie', name: DEMO_DECK_NAME, text: DEMO_TEXT, lesson: 1 },
   { key: 'wfragen', name: WFRAGEN_DECK_NAME, text: WFRAGEN_TEXT, lesson: 2 },
   { key: 'wochentage', name: WOCHENTAGE_DECK_NAME, text: WOCHENTAGE_TEXT, lesson: 3 },
   { key: 'monate', name: MONATE_DECK_NAME, text: MONATE_TEXT, lesson: 4 },
   { key: 'familie2', name: FAMILIE_DECK_NAME, text: FAMILIE_TEXT, lesson: 5 },
+  { key: 'verben', name: VERBEN_DECK_NAME, text: VERBEN_TEXT, lesson: 6 },
   { key: 'zahlen', name: ZAHLEN_DECK_NAME, text: ZAHLEN_TEXT, lesson: 0 },
 ]

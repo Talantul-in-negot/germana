@@ -49,6 +49,18 @@ export class LexiDB extends Dexie {
           p.settings.genderColors ??= true
         })
       })
+    // v3 (verbs): per-person forms progress (`persons`) and Conjugare stages (`conj`) are optional
+    // fields on progress rows; existing rows are kept exactly as they are.
+    this.version(3).stores({
+      decks: 'id',
+      words: 'id, deckId, [deckId+unitIndex]',
+      profiles: 'id',
+      progress: '[profileId+wordId], profileId, wordId',
+      sessions: 'id, profileId, date',
+      achievements: 'id, profileId, &[profileId+key]',
+      meta: 'key',
+      tests: 'id, profileId, deckId',
+    })
   }
 }
 

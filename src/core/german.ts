@@ -1,5 +1,5 @@
 /** German-specific parsing helpers: articles, plural shorthand, verb forms, dialogues. Pure. */
-import type { Gender, VerbInfo } from './types'
+import type { Gender, Present, VerbInfo } from './types'
 
 export const ARTICLES: readonly Gender[] = ['der', 'die', 'das']
 
@@ -154,6 +154,18 @@ export function bareFromExplicitPlural(s: string): string {
 
 const PARTICLES = ['auf', 'an', 'ab', 'aus', 'ein', 'mit', 'vor', 'zu', 'zurück', 'weg', 'fest', 'her', 'hin', 'nach', 'um', 'weiter', 'zusammen', 'fern', 'dazu', 'los', 'statt', 'teil', 'durch', 'bei', 'heraus', 'herunter', 'hoch', 'vorbei', 'rein', 'raus']
 
+const REG_END = ['e', 'st', 't', 'en', 't', 'en']
+function isRegularForTable(inf: string, present: Present): boolean {
+  const stem = inf.toLowerCase().replace(/e?n$/, '')
+  return present.every((f, i) => {
+    const w = f.toLowerCase()
+    const ok = [stem + REG_END[i]]
+    if (/[dt]$/.test(stem) && (i === 1 || i === 2 || i === 4)) ok.push(stem + 'e' + REG_END[i])
+    if (i === 3 || i === 5) ok.push(inf.toLowerCase())
+    return ok.includes(w)
+  })
+}
+
 export interface VerbParse {
   info: VerbInfo
   /** false when the forms text did not look like German verb forms */
@@ -161,7 +173,22 @@ export interface VerbParse {
 }
 
 /** Forms = `3rd sg, Präteritum, Perfekt` (any prefix of that list). */
+/** `P: bin, bist, ist, sind, seid, sind` -> exactly 6 values, notebook order. */
+export function parsePresentTable(forms: string): Present | null {
+  const m = forms.match(/^\s*P\s*:\s*(.+)$/i)
+  if (!m) return null
+  const parts = (m[1] as string).split(',').map((x) => x.trim())
+  if (parts.length !== 6 || parts.some((x) => !/^[a-zäöüß]+$/i.test(x))) return null
+  return parts as Present
+}
+
 export function parseVerbForms(infinitive: string, forms: string): VerbParse {
+  if (/^\s*P\s*:/i.test(forms)) {
+    const present = parsePresentTable(forms)
+    if (!present) return { info: {}, ok: false }
+    const info: VerbInfo = { present, present3sg: present[2], irregular: !isRegularForTable(infinitive, present) }
+    return { info, ok: /^[a-zäöüß]+n$/i.test(infinitive.trim()) }
+  }
   const parts = forms.split(',').map((x) => x.trim()).filter(Boolean)
   const info: VerbInfo = {}
   if (parts[0]) info.present3sg = parts[0]

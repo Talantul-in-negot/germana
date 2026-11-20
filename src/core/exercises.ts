@@ -1,6 +1,7 @@
 /** Exercise generation + evaluation from a deck. Pure. */
 import { checkAnswer, checkRomanian, fold, normalize, type CheckResult } from './answer'
 import { checkDigits, checkGermanAnswer, type DeNote, type DeTarget } from './answerDe'
+import { ENDINGS, PERSONS, allFormsFor, analyzeSentence, checkForm, distinctForms, hasPresent, isSeinHaben, rewriteSentence, sentencesOf } from './conjugation'
 import { MONTHS, SEASONS, SEASON_OF_MONTH, seqOf, splitArticle, splitDialogue, type SeqSet } from './german'
 import { shuffle } from './id'
 import { allNumberWords, isCompoundNumber, numberBreakdown, numberDistractors, numberToGerman, type NumPart } from './numbers'
@@ -13,7 +14,7 @@ interface Base {
 }
 
 export interface ChoiceExercise extends Base {
-  type: 'mc_l2_l1' | 'mc_l1_l2' | 'listen_choose' | 'fill_blank' | 'plural_choice' | 'context_choice' | 'context_listen' | 'num_word_to_digits' | 'seq_neighbor' | 'fill_prep' | 'listen_ro' | 'month_season' | 'season_months' | 'collective' | 'possessive'
+  type: 'mc_l2_l1' | 'mc_l1_l2' | 'listen_choose' | 'fill_blank' | 'plural_choice' | 'context_choice' | 'context_listen' | 'num_word_to_digits' | 'seq_neighbor' | 'fill_prep' | 'listen_ro' | 'month_season' | 'season_months' | 'collective' | 'possessive' | 'verb_dropdown' | 'verb_pronoun' | 'verb_listen_blank' | 'verb_dropdown' | 'verb_pronoun' | 'verb_listen_blank'
   prompt: string
   /** sentence with the word masked (fill_blank / context) */
   sentence?: string
@@ -25,16 +26,22 @@ export interface ChoiceExercise extends Base {
   skill?: SubSkill
   /** number value, to show the ein+und+zwanzig breakdown */
   value?: number
+  /** present-tense person (0..5) this exercise trains */
+  person?: number
+  /** dropdown inside a sentence (verb_dropdown) */
+  inline?: { before: string; after: string }
+  /** TTS reads before, beeps for the blank, reads after (verb_listen_blank) */
+  speakParts?: [string, string]
 }
 
 export interface MatchExercise extends Base {
-  type: 'match' | 'match_qa' | 'gender_pairs'
+  type: 'match' | 'match_qa' | 'gender_pairs' | 'verb_endings'
   /** `wordId` of each pair; the exercise's own wordId is the target */
   pairs: { wordId: string; left: string; right: string }[]
 }
 
 export interface TypeExercise extends Base {
-  type: 'type_l1_l2' | 'type_l2_l1' | 'listen_type' | 'speak' | 'plural_type' | 'num_listen_digits' | 'num_digits_to_word' | 'num_arith' | 'seq_neighbor_type'
+  type: 'type_l1_l2' | 'type_l2_l1' | 'listen_type' | 'speak' | 'plural_type' | 'num_listen_digits' | 'num_digits_to_word' | 'num_arith' | 'seq_neighbor_type' | 'verb_pronoun_type'
   prompt: string
   accepted: string[]
   speak?: string
@@ -44,6 +51,8 @@ export interface TypeExercise extends Base {
   ro?: { translations: string[] }
   /** Romanian words of the course (a typo must not produce another one: iunie/iulie) */
   roLexicon?: string[]
+  /** conjugated form: EXACT match, no typo tolerance */
+  exact?: { expected: string; person: number }
   /** accepted digits (number listening) */
   digits?: number
   lexicon?: string[]
@@ -52,11 +61,13 @@ export interface TypeExercise extends Base {
 }
 
 export interface SentenceExercise extends Base {
-  type: 'sentence_build'
+  type: 'sentence_build' | 'verb_sentence_build'
   prompt: string
   solution: string[]
   bank: string[]
   speak: string
+  /** do not read the German sentence aloud (it would give the answer away) */
+  noSpeak?: boolean
 }
 
 export interface ArticleExercise extends Base {
@@ -108,8 +119,10 @@ export interface BuildContext {
   newId: () => string
   /** number words the learner has already seen (mini-arithmetic) */
   seenNumbers?: Word[]
-  /** effective level of the target word (partial vs full sequence) */
+  /** effective level of the target word (partial vs full sequence, dropdown size) */
   level?: number
+  /** present-tense person to practise (the weakest one) */
+  person?: number
 }
 
 // ---------------------------------------------------------------------------
@@ -176,6 +189,12 @@ export function contextOf(w: Word): { sentence: string; question: string; answer
       if (am) return { sentence: `${d.question} – ${am}`, question: d.question, answer: d.answer }
     }
     return null
+  }
+  if (w.verb?.present && w.example) {
+    const sents = sentencesOf(w).map((x) => x.de)
+    const pick = sents.find((x) => x.trim().endsWith('?')) ?? sents[0]
+    const b = pick ? analyzeSentence(pick, w.verb.present) : null
+    if (b) return { sentence: `${b.before}___${b.after}`, question: pick as string, answer: '' }
   }
   if (w.type === 'other' && w.example) {
     const masked = maskTerm(w.example, w.term, '___')
@@ -308,6 +327,8 @@ export interface PlanInfo {
   hasSeasons?: boolean
   /** the deck has male/female family pairs (gender pairs) */
   hasPairs?: boolean
+  /** strength (0-100) of each person of a present-tense verb */
+  personStrengths?: number[]
   /** the deck has collective words (Eltern, Geschwister …) */
   collectives?: boolean
 }
@@ -355,7 +376,15 @@ export function chooseTypeFor(
     if (band === 'recall') return pick(['num_listen_digits', 'num_word_to_digits', 'mc_l1_l2'])
     return pick(info.seenNumbers.length >= 2 ? ['num_digits_to_word', 'num_arith', 'num_listen_digits'] : ['num_digits_to_word', 'num_listen_digits'])
   }
-  if (info.level >= 1) {
+  if (hasPresent(w) && info.level >= 1 && ctx.rng() < 0.7) {
+    const band = bandForLevel(info.level)
+    const regular = !w.verb?.irregular
+    const ro = sentencesOf(w).some((x) => x.ro)
+    if (band === 'recognition') return pick(['verb_dropdown', 'verb_listen_blank', ...(regular ? (['verb_endings'] as const) : [])])
+    if (band === 'recall') return pick(['verb_pronoun', 'context_choice', 'verb_dropdown', ...(ro ? (['verb_sentence_build'] as const) : [])])
+    return pick(['verb_pronoun_type', 'verb_dropdown', ...(ro ? (['verb_sentence_build'] as const) : [])])
+  }
+  if (info.level >= 1 && !hasPresent(w)) {
     const req = requiredSkills(w)
     if (req.includes('gender') && ctx.rng() < 0.4) return 'article'
     if (req.includes('plural') && ctx.rng() < (isUmlautPlural(w) ? 0.65 : 0.3)) return (info.skillLevels.plural ?? 0) <= 1 ? 'plural_choice' : 'plural_type'
@@ -430,6 +459,22 @@ export function pluralVariants(noun: string, correct: string, rng: () => number)
   }
   cands.delete(correct)
   return shuffle([...cands], rng).slice(0, 3)
+}
+
+/**
+ * Options of a conjugation dropdown. Levels 0-1: 3 options (sein/haben: one distractor comes from
+ * the other verb). Levels 2+: ALL distinct forms (sein/haben: of both verbs).
+ */
+export function verbOptions(w: Word, deckWords: Word[], level: number, correct: string, rng: () => number): string[] {
+  const own = distinctForms(w.verb?.present ?? [])
+  if (level >= 2) return shuffle(allFormsFor(w, deckWords), rng)
+  const same = shuffle(own.filter((f) => f !== correct), rng)
+  if (isSeinHaben(w)) {
+    const other = deckWords.find((x) => x.id !== w.id && isSeinHaben(x))
+    const alt = shuffle(distinctForms(other?.verb?.present ?? []).filter((f) => f !== correct && !own.includes(f)), rng)
+    return shuffle([correct, ...same.slice(0, 1), ...alt.slice(0, 1)], rng)
+  }
+  return shuffle([correct, ...same.slice(0, 2)], rng)
 }
 
 export function buildExercise(w: Word, type: ExerciseType, ctx: BuildContext): Exercise {
@@ -540,6 +585,13 @@ export function buildExercise(w: Word, type: ExerciseType, ctx: BuildContext): E
     case 'context_choice': {
       const c = contextOf(w)
       if (!c) return buildExercise(w, 'mc_l1_l2', ctx)
+      if (hasPresent(w)) {
+        const b = analyzeSentence(c.question, w.verb.present)
+        if (b) {
+          const forms = verbOptions(w, deckWords, ctx.level ?? 2, b.answer, rng)
+          return choice({ ...base, type, prompt: primary(w), sentence: c.sentence, speak: c.question, skill: 'forms', person: b.person }, b.answer, forms.filter((o) => o !== b.answer), rng)
+        }
+      }
       const withCtx = deckWords.filter((x) => x.id !== w.id && contextOf(x))
       const rest = deckWords.filter((x) => x.id !== w.id && !contextOf(x) && x.type !== 'noun')
       const sameGender = (x: Word): number => (isFamilyWord(w) && x.gender === w.gender ? 0 : 1)
@@ -555,6 +607,48 @@ export function buildExercise(w: Word, type: ExerciseType, ctx: BuildContext): E
       const pool = [...shuffle(withCtx, rng), ...shuffle(deckWords.filter((x) => x.id !== w.id && !contextOf(x)), rng)]
       const wrong = distractors(w, pool, 3, () => 0.5, (x) => x.translations).map(primary)
       return choice({ ...base, type, prompt: '', sentence: c.sentence, speak: c.question }, pickTranslation(w, rng), wrong, rng)
+    }
+    // ---- present-tense verbs ----
+    case 'verb_dropdown':
+    case 'verb_listen_blank': {
+      if (!hasPresent(w)) return buildExercise(w, 'mc_l2_l1', ctx)
+      const present = w.verb.present
+      const sents = sentencesOf(w).map((x) => x.de)
+      let sentence = sents[Math.floor(rng() * sents.length)] ?? ''
+      if (ctx.person !== undefined && rng() < 0.5) sentence = rewriteSentence(sentence, present, ctx.person) ?? sentence
+      const b = analyzeSentence(sentence, present)
+      if (!b) return buildExercise(w, 'verb_pronoun', ctx)
+      const options = verbOptions(w, deckWords, ctx.level ?? 0, b.answer, rng)
+      const ex = choice({ ...base, type, prompt: '', skill: 'forms', person: b.person, sentence: `${b.before}___${b.after}` }, b.answer, options.filter((o) => o !== b.answer), rng)
+      if (type === 'verb_dropdown') ex.inline = { before: b.before, after: b.after }
+      else ex.speakParts = [b.before, b.after]
+      return ex
+    }
+    case 'verb_pronoun':
+    case 'verb_pronoun_type': {
+      if (!hasPresent(w)) return buildExercise(w, 'mc_l2_l1', ctx)
+      const p = ctx.person ?? Math.floor(rng() * 6)
+      const answer = w.verb.present[p] as string
+      const prompt = `${PERSONS[p]} ___ (${w.term})`
+      if (type === 'verb_pronoun_type') {
+        return { ...base, type, prompt, accepted: [answer], exact: { expected: answer, person: p }, skill: 'forms' }
+      }
+      const options = verbOptions(w, deckWords, ctx.level ?? 0, answer, rng)
+      return choice({ ...base, type, prompt, skill: 'forms', person: p }, answer, options.filter((o) => o !== answer), rng)
+    }
+    case 'verb_endings': {
+      if (!hasPresent(w) || w.verb.irregular) return buildExercise(w, 'verb_pronoun', ctx)
+      const pairs = PERSONS.map((label, i) => ({ wordId: `p${i}`, left: label, right: `-${ENDINGS[i]}` }))
+      return { ...base, type, pairs }
+    }
+    case 'verb_sentence_build': {
+      const s = sentencesOf(w).filter((x) => x.ro)
+      const pick = s[Math.floor(rng() * s.length)]
+      if (!pick || !pick.ro) return buildExercise(w, 'verb_dropdown', ctx)
+      const solution = tokenize(pick.de)
+      let bank = shuffle(solution, rng)
+      for (let i = 0; i < 5 && bank.join(' ') === solution.join(' '); i++) bank = shuffle(solution, rng)
+      return { ...base, type, prompt: pick.ro, solution, bank, speak: pick.de, noSpeak: true }
     }
     // ---- family ----
     case 'gender_pairs': {
@@ -699,6 +793,8 @@ export function buildExercise(w: Word, type: ExerciseType, ctx: BuildContext): E
 export interface Credit {
   skill: SubSkill
   correct: boolean
+  /** present-tense person (0..5) for per-person forms progress */
+  person?: number
 }
 
 export interface Outcome {
@@ -717,6 +813,8 @@ export interface Outcome {
   breakdown?: NumPart[]
   /** per-field results (verb forms, separable) */
   details?: boolean[]
+  /** "După «du» urmează lernst, nu lernt." */
+  personNote?: { person: number; expected: string; given: string }
 }
 
 export function creditsOf(o: Outcome): Credit[] {
@@ -729,7 +827,8 @@ function numberInfo(value: number | undefined): Pick<Outcome, 'breakdown'> {
 
 export function evaluateChoice(ex: ChoiceExercise, index: number): Outcome {
   const out: Outcome = { correct: index === ex.answerIndex, expected: ex.options[ex.answerIndex] ?? '', given: ex.options[index] ?? '' }
-  if (ex.skill) out.credits = [{ skill: ex.skill, correct: out.correct }]
+  if (ex.skill) out.credits = [{ skill: ex.skill, correct: out.correct, ...(ex.person !== undefined ? { person: ex.person } : {}) }]
+  if (ex.person !== undefined && !out.correct) out.personNote = { person: ex.person, expected: out.expected, given: out.given ?? '' }
   if (ex.value !== undefined) Object.assign(out, numberInfo(ex.value))
   return out
 }
@@ -740,6 +839,15 @@ export function evaluateArticle(ex: ArticleExercise, chosen: Gender): Outcome {
 }
 
 export function evaluateTyped(ex: TypeExercise, input: string): Outcome {
+  if (ex.exact) {
+    const ok = checkForm(input, ex.exact.expected)
+    const out: Outcome = {
+      correct: ok, expected: ex.exact.expected, given: input, credits: [{ skill: 'forms', correct: ok, person: ex.exact.person }],
+    }
+    if (ok) out.quality = 'exact'
+    else out.personNote = { person: ex.exact.person, expected: ex.exact.expected, given: input.trim() }
+    return out
+  }
   if (ex.digits !== undefined) {
     const ok = checkDigits(input, ex.digits)
     return { correct: ok, quality: ok ? 'exact' : undefined, expected: String(ex.digits), given: input, ...numberInfo(ex.value) }

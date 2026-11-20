@@ -53,6 +53,15 @@ export const EXERCISE_WEIGHT: Record<ExerciseType, number> = {
   gender_pairs: 1.0,
   collective: 1.5,
   possessive: 1.5,
+  conj_dropdown: 1.2,
+  conj_dropdown_all: 2.0,
+  conj_typing: 2.5,
+  verb_dropdown: 1.5,
+  verb_pronoun: 1.2,
+  verb_pronoun_type: 2.5,
+  verb_endings: 1.0,
+  verb_listen_blank: 1.5,
+  verb_sentence_build: 1.8,
 }
 
 /** Credit needed to leave level N (index = current level 1..4). */
@@ -130,7 +139,8 @@ export function strengthAt(p: WordProgress, now: number): number {
 
 export function isDue(p: WordProgress, now: number): boolean {
   if (p.level > 0 && p.lastSeenAt > 0 && now >= p.dueAt) return true
-  return Object.values(p.skills ?? {}).some((s) => !!s && s.level > 0 && s.lastSeenAt > 0 && now >= s.dueAt)
+  const due = (s: { level: number; lastSeenAt: number; dueAt: number } | undefined): boolean => !!s && s.level > 0 && s.lastSeenAt > 0 && now >= s.dueAt
+  return Object.values(p.skills ?? {}).some(due) || (p.persons ?? []).some(due)
 }
 
 export function needsPractice(p: WordProgress, now: number): boolean {
@@ -289,7 +299,17 @@ export function requiredSkills(w: Pick<Word, 'type' | 'gender' | 'plural' | 'plu
 export const SKILL_CAP_MARGIN = 2
 
 export function skillLevel(p: WordProgress, skill: SubSkill): number {
-  return skill === 'meaning' ? p.level : (p.skills?.[skill]?.level ?? 0)
+  if (skill === 'meaning') return p.level
+  if (skill === 'forms' && p.persons) return formsLevel(p)
+  return p.skills?.[skill]?.level ?? 0
+}
+
+/** Forms level of a present-tense verb: the average level of its 6 persons, rounded down. */
+export function formsLevel(p: WordProgress): number {
+  const ps = p.persons ?? []
+  if (ps.length === 0) return p.skills?.forms?.level ?? 0
+  const sum = [0, 1, 2, 3, 4, 5].reduce((a, i) => a + (ps[i]?.level ?? 0), 0)
+  return Math.floor(sum / 6)
 }
 
 /** Level shown in the UI and used for exercise bands: meaning level capped by required sub-skills. */
@@ -301,7 +321,7 @@ export function effectiveLevel(p: WordProgress): Level {
 
 function asWordProgress(base: WordProgress, st: SkillProgress | undefined): WordProgress {
   const fresh = newProgress(base.profileId, base.wordId)
-  return { ...fresh, ...(st ?? {}), skills: undefined, required: undefined } as WordProgress
+  return { ...fresh, ...(st ?? {}), skills: undefined, required: undefined, persons: undefined, conj: undefined } as WordProgress
 }
 
 /** Apply one answer to a sub-skill (same SRS rules as `applyAnswer`). */
@@ -312,16 +332,45 @@ export function applySkillAnswer(prev: WordProgress, skill: SubSkill, a: AnswerI
   }
   const cur = asWordProgress(prev, prev.skills?.[skill])
   const out = applyAnswer(cur, a)
-  const { skills: _s, required: _r, ...state } = out.progress
-  void _s
-  void _r
+  const state = stripState(out.progress)
   const progress: WordProgress = { ...prev, skills: { ...(prev.skills ?? {}), [skill]: state } }
   return { progress, previousLevel: out.previousLevel, leveledUp: out.leveledUp, leveledDown: out.leveledDown }
+}
+
+/** Strength of each person (0-100); never-practised persons count 0. */
+export function personStrengths(p: WordProgress, now: number): number[] {
+  return [0, 1, 2, 3, 4, 5].map((i) => {
+    const st = p.persons?.[i]
+    return st ? strengthAt(asWordProgress(p, st), now) : 0
+  })
+}
+
+/** Apply one answer to one person of a present-tense verb (own SRS state per person). */
+export function applyPersonAnswer(prev: WordProgress, person: number, a: AnswerInput): AnswerOutcome {
+  const persons = (prev.persons ? prev.persons.slice() : []) as SkillProgress[]
+  while (persons.length < 6) persons.push(stripState(newProgress(prev.profileId, prev.wordId)))
+  const out = applyAnswer(asWordProgress(prev, persons[person]), a)
+  persons[person] = stripState(out.progress)
+  return { progress: { ...prev, persons }, previousLevel: out.previousLevel, leveledUp: out.leveledUp, leveledDown: out.leveledDown }
+}
+
+function stripState(p: WordProgress): SkillProgress {
+  const { skills: _s, required: _r, persons: _p, conj: _c, ...state } = p
+  void _s
+  void _r
+  void _p
+  void _c
+  return state
 }
 
 /** Strength of the word = weakest strength among practised required sub-skills. */
 export function wordStrengthAt(p: WordProgress, now: number): number {
   let s = strengthAt(p, now)
+  if (p.persons && (p.required ?? []).includes('forms')) {
+    const ps = personStrengths(p, now)
+    s = Math.min(s, Math.round(ps.reduce((a, b) => a + b, 0) / 6))
+    return s
+  }
   for (const k of p.required ?? []) {
     const st = p.skills?.[k]
     if (st && st.level > 0) s = Math.min(s, strengthAt(asWordProgress(p, st), now))
@@ -333,7 +382,8 @@ export function wordStrengthAt(p: WordProgress, now: number): number {
 export function dueNow(p: WordProgress, now: number): WordProgress {
   const skills: WordProgress['skills'] = {}
   for (const [k, v] of Object.entries(p.skills ?? {})) skills[k as ExtraSkill] = { ...(v as SkillProgress), dueAt: now }
-  return { ...p, dueAt: now, skills }
+  const persons = p.persons?.map((x) => ({ ...x, dueAt: now }))
+  return { ...p, dueAt: now, skills, ...(persons ? { persons } : {}) }
 }
 
 /** Effective level of an optional progress record (0 when the word was never practised). */

@@ -18,11 +18,11 @@ describe('repo', () => {
     await ensureSeed()
     await ensureSeed()
     expect(await db.profiles.count()).toBe(1)
-    expect(await db.decks.count()).toBe(6)
+    expect(await db.decks.count()).toBe(7)
     const decks = await db.decks.toArray()
     expect(decks.every((d) => d.course === 'Menschen A1' && d.cefr === 'A1' && d.l2 === 'German')).toBe(true)
     const words = await db.words.toArray()
-    expect(words).toHaveLength(12 + 8 + 12 + 20 + 16 + 41)
+    expect(words).toHaveLength(12 + 8 + 12 + 20 + 16 + 10 + 41)
     const zahlen = decks.find((d) => d.name.startsWith('Zahlen'))!
     expect(new Set(words.filter((w) => w.deckId === zahlen.id).map((w) => w.unitIndex)).size).toBe(4)
     const familie = decks.find((d) => d.name.includes('Erste'))!
