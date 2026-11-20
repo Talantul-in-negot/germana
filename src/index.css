@@ -83,3 +83,9 @@ body {
 .ex-corner { width: 3rem; height: 3rem; flex-shrink: 0; }
 /* A full-height rounded white panel for centred / scrolling screens (result, intro, menu). */
 .screen-panel { margin: 0.75rem auto; width: calc(100% - 1.5rem); height: calc(100% - 1.5rem); max-width: 32rem; }
+
+/* Reduced motion: no UI transitions or smooth scrolling (scenery, parallax and the fawn's walk are handled in code). */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}

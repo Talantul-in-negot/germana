@@ -121,13 +121,37 @@ Fiecare cuvânt are un nivel: 0 Nou · 1 Văzut · 2 În învățare · 3 Famili
 * **Articole rapid** (20 de substantive, cronometru) și **Viteza numerelor** (20 de numere văzute sau auzite).
 * Culori pentru articole: der albastru · die roșu · das verde (se pot opri în Setări).
 
+## Aspectul nou (povestea ilustrată)
+
+Aplicația are acum un aspect de carte ilustrată: culori pastelate calde, forme rotunjite, peisaje desenate ca SVG (fără imagini raster, fără fișiere externe; ~110 KB de cod pentru toată arta).
+Mascota este puiul de căprioară **Reh**; fiecare zonă are și un prieten (iepuraș, vulpe, arici, rățușcă, veveriță, păsărică).
+
+* **Calea (Acasă)**: peisajul lecției din spatele căii, cu paralaxă la derulare. Puiul de căprioară stă pe prima unitate nefinalizată și *merge* (~600 ms) la următoarea când termini o unitate.
+  Toate unitățile rămân deschise (nu există blocaje). Nodurile Conjugare au același stil.
+* **Exerciții** (lecție, drill, test, conjugare): fundal estompat al zonei lecției, conținutul pe panouri albe rotunjite, un animal mic în colțul barei de sus
+  (se bucură la răspuns corect, te încurajează cu „Încearcă din nou!” la unul greșit; la *Test lecție* nu reacționează; se ascunde cât timp tastatura e deschisă).
+  La final: ploaie de frunze și petale cu animalele care sărbătoresc.
+* **Lecție → zonă**: lecțiile (în ordinea din aplicație) primesc pe rând zonele 1–6 (poiană, pădure, vale, lac, livadă, noapte); următoarele reiau ciclul și folosesc zonele 7–8 (savana, recif).
+* **Mișcare redusă**: cu `prefers-reduced-motion` peisajele sunt statice, fără paralaxă, iar căprioara „sare” instantaneu; animațiile se opresc și când fila e ascunsă.
+* **Contrast**: perechile text/fundal respectă WCAG AA (≥ 4,5:1); butoanele și zonele de atingere au ≥ 48 px.
+
+### Previzualizare: `/dev/scenes`
+
+În `npm run dev` există ruta `#/dev/scenes` (nu e inclusă în build-ul de producție): toate zonele (complet / estompat, cu derulare), animalele în toate stările, coroanele și ploaia de sărbătoare.
+
+### Cum adaugi o zonă
+
+Adaugă un obiect în `ZONES` din `src/theme/scenes.ts` (paletă, cer, soare/lună, particule, animalul rezident, straturile din spate spre față cu `speed` crescător).
+Nu trebuie schimbat niciun component; `tests/scenes.test.ts` verifică forma datelor. Detalii și cum adaugi un strat sau un animal: `src/art/README.md`.
+
 ## Structura proiectului
 
 ```
 src/core     logică pură, fără React/DOM: srs, parser, german, conjugation, answer/answerDe, exercises, lesson, gamification
 src/data     Dexie (db v1→v3 cu migrări), repo, service, backup, seed
 src/screens  ecrane (cale, pachete, lecție, conjugare, test, drill, progres, setări …)
-src/components  componente comune și exercițiile
+src/components  componente comune și exercițiile (PathFawn, ZoneScreen, Splash …)
+src/art, src/theme  ilustrațiile SVG și datele zonelor (scenes.ts, path.ts)
 tests/       teste Vitest   ·   e2e/  test Playwright
 ```
 

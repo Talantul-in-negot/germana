@@ -1,3 +1,4 @@
+import { MotionConfig } from 'framer-motion'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
@@ -34,6 +35,7 @@ export default function App() {
   }, [])
   if (!ready) return <Splash />
   return (
+    <MotionConfig reducedMotion="user">
     <HashRouter>
       <ProfileProvider>
         <Routes>
@@ -57,5 +59,6 @@ export default function App() {
         </Routes>
       </ProfileProvider>
     </HashRouter>
+    </MotionConfig>
   )
 }

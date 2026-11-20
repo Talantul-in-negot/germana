@@ -66,3 +66,15 @@ Choices made without asking (the brief said: pick the simplest reasonable option
     were deleted by Dexie v5; a verb's crown is `verbCrown` = average of its 6 persons, no 60% cap.
 31. **Hints**: the conjugation card is always available (ⓘ in lessons, toggle in stages 2-3), free of XP cost. Test lecție never shows it.
 32. A mode with nothing to practise shows the friendly `lesson.nothing` message instead of a lock. "Se deblochează" / 🔒 strings were removed; achievements keep their own "Blocată" label (not a gate).
+
+## Storybook look (illustrated zones)
+33. **Tokens once**: palette and radii live in `@theme` of `src/index.css`; the Tailwind `slate` scale is remapped to warm stones so every existing class follows the palette.
+    Brand is a deep sage green (white on it ~5.4:1); node/level colours use dark text on pastel fills. Buttons, choices, inputs and nav items are >= 48 px (`min-h-12`).
+34. **Zone per lesson = position in `sortDecks` order** (`zoneIndexForDeck`, cycles over all 8 zones). With the shipped data this is Zahlen (lesson 0) = meadow, W-Fragen = forest, Wochentage = valley,
+    Monate = lake, Familie = orchard, Verben = night; zones 7-8 only appear with more than six lessons. (The brief listed W-Fragen first; the app's own order puts Zahlen first and was followed.)
+35. **Scenery never takes part in layout**: it is a `position: fixed; z-index: -1` layer (`.scene-fixed`). Home owns its scroll state in `PathBackdrop` so scrolling re-renders only the scenery.
+    Exercise screens get their scene from the `ZonedScreen` route wrapper (zone from the `:deckId` param); the corner animal sits inside the header bar and keeps its box when hidden under the keyboard.
+36. **Fawn walking**: `fawnTargetIndex` = first non-completed unit. The last standing index per profile+deck is remembered in `localStorage` (UI memory only, not Dexie), so on return from a lesson the fawn
+    walks from the old node to the new one (600 ms). Reduced motion / hidden tab = instant jump. Home shows one fawn (on the path), the zone resident stands beside the path.
+37. **Reactions**: correct = `happy` 1.2 s, wrong = `encourage` + "Încearcă din nou!" in the feedback; Test lecție never reacts. `MotionConfig reducedMotion="user"` disables transform animations globally.
+38. **Dev route** `/dev/scenes` is registered only when `import.meta.env.DEV` (lazy chunk, absent from the production bundle). All art is inline SVG inside the main JS chunk, so the service worker precaches it already.
