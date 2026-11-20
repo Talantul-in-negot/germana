@@ -1,13 +1,16 @@
 import type { Deck } from './types'
 
 /** Courses alphabetically (decks without a course last), lessons by number, then by name. */
+/** Seed lesson "Zahlen" is stored as lesson 0; the notebook order puts it right after W-Fragen (lesson 2). */
+const lessonRank = (d: Deck): number => (d.lesson === 0 ? 2.5 : d.lesson ?? Number.MAX_SAFE_INTEGER)
+
 export function sortDecks(decks: readonly Deck[]): Deck[] {
   return decks.slice().sort((a, b) => {
     const ca = a.course ?? '￿'
     const cb = b.course ?? '￿'
     if (ca !== cb) return ca.localeCompare(cb)
-    const la = a.lesson ?? Number.MAX_SAFE_INTEGER
-    const lb = b.lesson ?? Number.MAX_SAFE_INTEGER
+    const la = lessonRank(a)
+    const lb = lessonRank(b)
     if (la !== lb) return la - lb
     return a.name.localeCompare(b.name)
   })
