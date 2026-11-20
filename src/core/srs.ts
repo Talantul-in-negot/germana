@@ -1,0 +1,242 @@
+/**
+ * Mastery / spaced-repetition model. Pure and framework-free.
+ *
+ * Levels: 0 New · 1 Seen · 2 Learning · 3 Familiar · 4 Strong · 5 Mastered
+ *
+ * Rules (see README "Mastery rules"):
+ *  - first exposure moves 0 -> 1 (no gating: it only means "seen");
+ *  - every later level needs weighted credit AND credit from >= 2 distinct sessions;
+ *  - 4 -> 5 additionally needs credit on >= 2 distinct calendar days, so a word
+ *    can never be Mastered within a single day of practice;
+ *  - wrong answers lower ease, remove some credit and may drop the level by one;
+ *  - strength (0-100) decays after `dueAt`; the level never drops from time alone.
+ */
+import type { ExerciseType, Level, Quality, WordProgress } from './types'
+
+export const DAY_MS = 86_400_000
+export const MAX_LEVEL: Level = 5
+export const MIN_EASE = 1.3
+export const MAX_EASE = 3.0
+export const START_EASE = 2.3
+
+/** Harder exercise => bigger weight => counts more (credit and XP). */
+export const EXERCISE_WEIGHT: Record<ExerciseType, number> = {
+  match: 0.8,
+  mc_l2_l1: 1.0,
+  listen_choose: 1.0,
+  mc_l1_l2: 1.5,
+  fill_blank: 1.8,
+  sentence_build: 1.8,
+  speak: 2.0,
+  type_l1_l2: 2.5,
+  listen_type: 2.5,
+}
+
+/** Credit needed to leave level N (index = current level 1..4). */
+export const LEVEL_UP_CREDIT: Record<number, number> = { 1: 2, 2: 3, 3: 4.5, 4: 6 }
+
+/** Strength ceiling per level while the word is not overdue. */
+export const LEVEL_STRENGTH: readonly number[] = [0, 30, 50, 70, 88, 100]
+
+export const LEVEL_KEYS = ['new', 'seen', 'learning', 'familiar', 'strong', 'mastered'] as const
+
+export type Band = 'recognition' | 'recall' | 'production'
+
+export const BAND_TYPES: Record<Band, ExerciseType[]> = {
+  recognition: ['mc_l2_l1', 'match', 'listen_choose'],
+  recall: ['mc_l1_l2', 'fill_blank', 'sentence_build'],
+  production: ['type_l1_l2', 'listen_type', 'speak'],
+}
+
+export function bandForLevel(level: number): Band {
+  if (level <= 1) return 'recognition'
+  if (level <= 3) return 'recall'
+  return 'production'
+}
+
+export function exerciseWeight(type: ExerciseType): number {
+  return EXERCISE_WEIGHT[type]
+}
+
+/** Local calendar day key YYYY-MM-DD. */
+export function dayKey(ts: number): string {
+  const d = new Date(ts)
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${d.getFullYear()}-${m}-${day}`
+}
+
+export function newProgress(profileId: string, wordId: string): WordProgress {
+  return {
+    profileId,
+    wordId,
+    level: 0,
+    strength: 0,
+    interval: 0,
+    ease: START_EASE,
+    dueAt: 0,
+    lastSeenAt: 0,
+    correctStreak: 0,
+    lapses: 0,
+    consecutiveWrong: 0,
+    levelCredit: 0,
+    creditSessions: [],
+    creditDays: [],
+    lastSessionId: null,
+    lapseSessionId: null,
+    statsByExerciseType: {},
+  }
+}
+
+const clamp = (n: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, n))
+
+/** Current strength 0-100. Decays once `dueAt` has passed. Never touches the level. */
+export function strengthAt(p: WordProgress, now: number): number {
+  if (p.level === 0 || p.lastSeenAt === 0) return 0
+  const base = LEVEL_STRENGTH[p.level] ?? 0
+  const lapsePenalty = p.consecutiveWrong > 0 ? 0.6 : 1
+  if (now <= p.dueAt) {
+    const span = Math.max(p.dueAt - p.lastSeenAt, 1)
+    const frac = clamp((now - p.lastSeenAt) / span, 0, 1)
+    return Math.round(base * (1 - 0.1 * frac) * lapsePenalty)
+  }
+  const overdueDays = (now - p.dueAt) / DAY_MS
+  const halfLife = Math.max(p.interval, 1)
+  return Math.round(base * 0.9 * Math.pow(2, -overdueDays / halfLife) * lapsePenalty)
+}
+
+export function isDue(p: WordProgress, now: number): boolean {
+  return p.level > 0 && p.lastSeenAt > 0 && now >= p.dueAt
+}
+
+export function needsPractice(p: WordProgress, now: number): boolean {
+  return p.level > 0 && (isDue(p, now) || strengthAt(p, now) < 50)
+}
+
+export interface AnswerInput {
+  correct: boolean
+  type: ExerciseType
+  /** Only meaningful for typed answers. A typo/diacritics hit is `correct: true` but weighted lower. */
+  quality?: Quality
+  now: number
+  /** id of the lesson/session the answer belongs to */
+  sessionId: string
+}
+
+export interface AnswerOutcome {
+  progress: WordProgress
+  previousLevel: Level
+  leveledUp: boolean
+  leveledDown: boolean
+}
+
+function addUnique(list: string[], v: string): string[] {
+  return list.includes(v) ? list : [...list, v]
+}
+
+function qualityMultiplier(q: Quality | undefined): number {
+  if (q === 'typo') return 0.5
+  if (q === 'diacritics') return 0.9
+  return 1
+}
+
+/** Apply one answer to a word's progress. Returns a new object; input is not mutated. */
+export function applyAnswer(prev: WordProgress, a: AnswerInput): AnswerOutcome {
+  const p: WordProgress = {
+    ...prev,
+    creditSessions: [...prev.creditSessions],
+    creditDays: [...prev.creditDays],
+    statsByExerciseType: { ...prev.statsByExerciseType },
+  }
+  const previousLevel = prev.level
+  const weight = exerciseWeight(a.type)
+  const firstInSession = prev.lastSessionId !== a.sessionId
+  const today = dayKey(a.now)
+
+  const stats = { ...(p.statsByExerciseType[a.type] ?? { correct: 0, wrong: 0 }) }
+  if (a.correct) stats.correct += 1
+  else stats.wrong += 1
+  p.statsByExerciseType[a.type] = stats
+
+  p.lastSeenAt = a.now
+  p.lastSessionId = a.sessionId
+
+  let leveledUp = false
+  let leveledDown = false
+
+  if (a.correct) {
+    p.correctStreak += 1
+    p.consecutiveWrong = 0
+    p.levelCredit += weight * qualityMultiplier(a.quality)
+    p.creditSessions = addUnique(p.creditSessions, a.sessionId)
+    p.creditDays = addUnique(p.creditDays, today)
+    if (a.quality !== 'typo') p.ease = Math.min(MAX_EASE, p.ease + 0.03 * weight)
+
+    if (firstInSession) {
+      let next: number
+      if (p.interval < 1) next = 1
+      else if (p.interval < 3) next = 3
+      else next = Math.max(p.interval + 1, Math.round(p.interval * p.ease))
+      if (a.quality === 'typo') next = Math.max(1, Math.round(next * 0.7))
+      p.interval = next
+      p.dueAt = a.now + next * DAY_MS
+    }
+  } else {
+    p.correctStreak = 0
+    p.consecutiveWrong += 1
+    p.ease = Math.max(MIN_EASE, p.ease - 0.2)
+    if (p.lapseSessionId !== a.sessionId) {
+      p.lapses += 1
+      p.lapseSessionId = a.sessionId
+    }
+    p.interval = Math.max(0.5, Math.round(p.interval * 0.25 * 10) / 10)
+    p.dueAt = a.now + p.interval * DAY_MS
+    p.levelCredit = Math.max(0, p.levelCredit - 1)
+  }
+
+  if (p.level === 0) {
+    // First exposure only means "seen"; credit earned now is kept.
+    p.level = 1
+    leveledUp = true
+  } else if (a.correct && p.level < MAX_LEVEL) {
+    const need = LEVEL_UP_CREDIT[p.level] ?? Infinity
+    const sessionsOk = p.creditSessions.length >= 2
+    const daysOk = p.level < 4 || p.creditDays.length >= 2
+    if (p.levelCredit >= need && sessionsOk && daysOk) {
+      p.level = (p.level + 1) as Level
+      p.levelCredit = 0
+      p.creditSessions = []
+      p.creditDays = []
+      leveledUp = true
+    }
+  } else if (!a.correct && p.level >= 2 && p.consecutiveWrong >= 2) {
+    p.level = (p.level - 1) as Level
+    p.levelCredit = 0
+    p.creditSessions = []
+    p.creditDays = []
+    p.consecutiveWrong = 0
+    leveledDown = true
+  }
+
+  p.strength = strengthAt(p, a.now)
+  return { progress: p, previousLevel, leveledUp, leveledDown }
+}
+
+/** Overall accuracy of a word across all exercise types, 0-1 (null if never answered). */
+export function accuracyOf(p: WordProgress): number | null {
+  let c = 0
+  let w = 0
+  for (const s of Object.values(p.statsByExerciseType)) {
+    if (!s) continue
+    c += s.correct
+    w += s.wrong
+  }
+  return c + w === 0 ? null : c / (c + w)
+}
+
+/** Lesson-selection priority: overdue words first, then the weakest. Higher = more urgent. */
+export function reviewPriority(p: WordProgress, now: number): number {
+  const s = strengthAt(p, now)
+  const overdue = isDue(p, now) ? 100 + Math.min((now - p.dueAt) / DAY_MS, 60) : 0
+  return overdue + (100 - s)
+}
