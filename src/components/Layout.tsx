@@ -1,4 +1,6 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Scene } from '../art'
+import { zoneForIndex } from '../theme/scenes'
 import { displayStreak, refillHearts } from '../core/gamification'
 import { dayKey } from '../core/srs'
 import { useProfile } from '../data/profile-context'
@@ -20,6 +22,7 @@ const TABS: { to: string; key: Key; icon: string }[] = [
 export default function Layout() {
   const { profile } = useProfile()
   const nav = useNavigate()
+  const isHome = useLocation().pathname === '/'
   const sessions = useSessions(profile.id)
   const now = Date.now()
   const today = dayKey(now)
@@ -43,20 +46,27 @@ export default function Layout() {
   }
 
   return (
-    <div className="mx-auto flex h-full max-w-lg flex-col">
-      <header className="sticky top-0 z-20 flex items-center gap-3 border-b-2 border-slate-100 bg-paper/95 px-4 py-2 backdrop-blur">
-        <button aria-label={t('profiles.title')} className="text-3xl" onClick={() => nav('/profiles')}>{profile.avatar}</button>
-        <div className="flex-1 truncate text-lg font-black">{profile.name}</div>
-        {profile.settings.hearts && <span className="font-black text-bad" title="hearts">❤ {hearts}</span>}
-        <span className="font-black text-orange-500" title={t('home.streak', { n: streak })} data-testid="streak">🔥 {streak}</span>
-        {profile.streakFreezes > 0 && <span className="font-black text-sky-600" title={t('home.freezes', { n: profile.streakFreezes })}>❄ {profile.streakFreezes}</span>}
-        <div title={t('home.todayXp', { xp: todayXp, goal: profile.dailyGoal })} data-testid="goal-ring">
+    <>
+    {!isHome && (
+      <div className="scene-fixed" aria-hidden="true" data-testid="layout-scene">
+        <Scene zone={zoneForIndex(0)} variant="dim" />
+        <div className="absolute inset-0 bg-paper/80" />
+      </div>
+    )}
+    <div className="relative z-[1] mx-auto flex h-full max-w-lg flex-col">
+      <header className="sticky top-0 z-20 flex items-center gap-2 rounded-b-3xl bg-paper/95 px-4 py-2 shadow-soft backdrop-blur">
+        <button aria-label={t('profiles.title')} className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-3xl shadow-sm" onClick={() => nav('/profiles')}>{profile.avatar}</button>
+        <div className="min-w-0 flex-1 truncate text-lg font-black">{profile.name}</div>
+        {profile.settings.hearts && <span className="pill text-bad" title="hearts">❤ {hearts}</span>}
+        <span className="pill text-orange-700" title={t('home.streak', { n: streak })} data-testid="streak">🔥 {streak}</span>
+        {profile.streakFreezes > 0 && <span className="pill text-sky-800" title={t('home.freezes', { n: profile.streakFreezes })}>❄ {profile.streakFreezes}</span>}
+        <div className="rounded-full bg-white p-0.5 shadow-sm" title={t('home.todayXp', { xp: todayXp, goal: profile.dailyGoal })} data-testid="goal-ring">
           <ProgressRing value={todayXp} goal={profile.dailyGoal} />
         </div>
       </header>
 
       {dueBackup && (
-        <div className="mx-4 mt-3 flex flex-wrap items-center gap-2 rounded-2xl bg-amber-50 p-3 text-sm font-bold text-amber-900" role="alert" data-testid="backup-reminder">
+        <div className="mx-4 mt-3 flex flex-wrap items-center gap-2 rounded-3xl bg-amber-50 p-3 text-sm font-bold text-amber-900 shadow-soft" role="alert" data-testid="backup-reminder">
           <span className="flex-1">{lastBackup === undefined ? t('backup.reminderNever') : t('backup.reminder')}</span>
           <button className="btn btn-primary !px-3 !py-1.5 !text-sm" onClick={() => void doBackup()}>{t('backup.export')}</button>
           <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => { setHidden(true); void setMeta('backupSnoozedAt', Date.now()) }}>{t('backup.dismiss')}</button>
@@ -66,11 +76,11 @@ export default function Layout() {
         <Outlet />
       </main>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t-2 border-slate-100 bg-white pb-[env(safe-area-inset-bottom)]">
-        <ul className="mx-auto flex max-w-lg">
+      <nav className="fixed inset-x-0 bottom-0 z-30 pb-[env(safe-area-inset-bottom)]">
+        <ul className="mx-auto flex max-w-lg rounded-t-3xl bg-white/95 px-2 shadow-[0_-6px_18px_-6px_rgb(90_60_30/0.25)] backdrop-blur">
           {TABS.map((tab) => (
             <li key={tab.to} className="flex-1">
-              <NavLink to={tab.to} end={tab.to === '/'} className={({ isActive }) => `flex flex-col items-center py-2 text-xs font-extrabold ${isActive ? 'text-brand' : 'text-slate-500'}`}>
+              <NavLink to={tab.to} end={tab.to === '/'} className={({ isActive }) => `my-1 flex min-h-14 flex-col items-center justify-center rounded-2xl py-1 text-xs font-extrabold ${isActive ? 'bg-brand-soft text-brand-dark' : 'text-slate-600'}`}>
                 <span className="text-2xl">{tab.icon}</span>
                 {t(tab.key)}
               </NavLink>
@@ -79,5 +89,6 @@ export default function Layout() {
         </ul>
       </nav>
     </div>
+    </>
   )
 }

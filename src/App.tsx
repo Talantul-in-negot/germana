@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import Layout from './components/Layout'
 import { ProfileProvider } from './data/profile-context'
@@ -18,6 +18,8 @@ import Profiles from './screens/Profiles'
 import Progress from './screens/Progress'
 import Settings from './screens/Settings'
 
+const DevScenes = import.meta.env.DEV ? lazy(() => import('./screens/DevScenes')) : null
+
 /** Remount the lesson on every navigation so "another lesson" starts fresh. */
 function KeyedLesson() {
   const loc = useLocation()
@@ -34,6 +36,7 @@ export default function App() {
     <HashRouter>
       <ProfileProvider>
         <Routes>
+          {DevScenes && <Route path="/dev/scenes" element={<Suspense fallback={null}><DevScenes /></Suspense>} />}
           <Route path="/lesson/:deckId" element={<KeyedLesson />} />
           <Route path="/test/:deckId" element={<TestMode />} />
           <Route path="/conj/:deckId/all" element={<AllVerbs />} />

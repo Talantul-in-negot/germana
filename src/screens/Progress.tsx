@@ -39,7 +39,7 @@ export function Heatmap({ xpByDay, goal, weeks = 17 }: { xpByDay: Map<string, nu
   const shade = (xp: number): string => {
     if (xp <= 0) return 'bg-slate-200'
     const r = xp / Math.max(goal, 1)
-    return r < 0.5 ? 'bg-violet-200' : r < 1 ? 'bg-violet-400' : r < 2 ? 'bg-violet-600' : 'bg-violet-800'
+    return r < 0.5 ? 'bg-emerald-200' : r < 1 ? 'bg-emerald-400' : r < 2 ? 'bg-emerald-600' : 'bg-emerald-800'
   }
   return (
     <div>
@@ -50,7 +50,7 @@ export function Heatmap({ xpByDay, goal, weeks = 17 }: { xpByDay: Map<string, nu
       </div>
       <div className="mt-2 flex items-center justify-end gap-1 text-xs text-slate-500">
         {t('progress.heatmapLess')}
-        {['bg-slate-200', 'bg-violet-200', 'bg-violet-400', 'bg-violet-600', 'bg-violet-800'].map((c) => <i key={c} className={`h-3 w-3 rounded-sm ${c}`} />)}
+        {['bg-slate-200', 'bg-emerald-200', 'bg-emerald-400', 'bg-emerald-600', 'bg-emerald-800'].map((c) => <i key={c} className={`h-3 w-3 rounded-sm ${c}`} />)}
         {t('progress.heatmapMore')}
       </div>
     </div>
