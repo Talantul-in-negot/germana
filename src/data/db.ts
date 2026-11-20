@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { Achievement, Deck, Profile, SessionLog, Word, WordProgress } from '../core/types'
+import type { Achievement, Deck, Profile, SessionLog, TestResult, Word, WordProgress } from '../core/types'
 
 export interface MetaRow {
   key: string
@@ -14,6 +14,7 @@ export class LexiDB extends Dexie {
   sessions!: Table<SessionLog, string>
   achievements!: Table<Achievement, string>
   meta!: Table<MetaRow, string>
+  tests!: Table<TestResult, string>
 
   constructor(name = 'lexi-path') {
     super(name)
@@ -26,6 +27,28 @@ export class LexiDB extends Dexie {
       achievements: 'id, profileId, &[profileId+key]',
       meta: 'key',
     })
+    // v2 (German): sub-skills on progress, lesson-test history, gender-colour setting.
+    // Existing decks, words and progress are kept as they are; old progress becomes the `meaning` sub-skill.
+    this.version(2)
+      .stores({
+        decks: 'id',
+        words: 'id, deckId, [deckId+unitIndex]',
+        profiles: 'id',
+        progress: '[profileId+wordId], profileId, wordId',
+        sessions: 'id, profileId, date',
+        achievements: 'id, profileId, &[profileId+key]',
+        meta: 'key',
+        tests: 'id, profileId, deckId',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('progress').toCollection().modify((p: WordProgress) => {
+          p.skills ??= {}
+          p.required ??= []
+        })
+        await tx.table('profiles').toCollection().modify((p: Profile) => {
+          p.settings.genderColors ??= true
+        })
+      })
   }
 }
 

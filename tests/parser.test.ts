@@ -4,7 +4,7 @@ import { assignUnits, unitSizes } from '../src/core/units'
 
 describe('parseWordList', () => {
   it('parses term ; translation ; example ; tags', () => {
-    const r = parseWordList('house ; casă|locuință ; I live in a house. ; home, building')
+    const r = parseWordList('house ; casă|locuință ; I live in a house. ; home, building', [], 'en')
     expect(r.separator).toBe(';')
     expect(r.rows).toHaveLength(1)
     const row = r.rows[0]!

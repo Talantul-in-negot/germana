@@ -4,6 +4,7 @@ export const MAX_UNIT = 10
 /** Sizes of consecutive units for `n` words. Aims for 8–10 words each, as even as possible. */
 export function unitSizes(n: number): number[] {
   if (n <= 0) return []
+  if (n <= 12) return [n] // a textbook lesson of up to 12 words stays one unit
   let k = -1
   for (let c = Math.ceil(n / MAX_UNIT); c <= Math.floor(n / MIN_UNIT); c++) {
     k = c
@@ -23,4 +24,27 @@ export function assignUnits(n: number): number[] {
     for (let i = 0; i < size; i++) out.push(u)
   })
   return out
+}
+
+/**
+ * Unit index per word. Words with a group tag (0-10, 11-20 …) get one unit per group in order of
+ * first appearance; otherwise lessons of <= 12 words stay whole and larger ones split into 8–10.
+ */
+export function assignUnitsFor(words: readonly { group?: string | undefined }[]): number[] {
+  if (words.some((w) => w.group)) {
+    const order: string[] = []
+    let last = 0
+    return words.map((w) => {
+      if (w.group) {
+        let i = order.indexOf(w.group)
+        if (i < 0) {
+          order.push(w.group)
+          i = order.length - 1
+        }
+        last = i
+      }
+      return last
+    })
+  }
+  return assignUnits(words.length)
 }

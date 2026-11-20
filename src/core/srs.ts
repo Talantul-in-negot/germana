@@ -11,7 +11,7 @@
  *  - wrong answers lower ease, remove some credit and may drop the level by one;
  *  - strength (0-100) decays after `dueAt`; the level never drops from time alone.
  */
-import type { ExerciseType, Level, Quality, WordProgress } from './types'
+import type { ExerciseType, Level, Quality, SkillProgress, SubSkill, WordProgress, Word } from './types'
 
 export const DAY_MS = 86_400_000
 export const MAX_LEVEL: Level = 5
@@ -30,6 +30,19 @@ export const EXERCISE_WEIGHT: Record<ExerciseType, number> = {
   speak: 2.0,
   type_l1_l2: 2.5,
   listen_type: 2.5,
+  type_l2_l1: 2.0,
+  article: 1.2,
+  plural_choice: 1.2,
+  plural_type: 2.0,
+  verb_forms: 2.2,
+  separable: 2.0,
+  context_choice: 1.5,
+  context_listen: 1.5,
+  match_qa: 1.0,
+  num_listen_digits: 2.2,
+  num_digits_to_word: 2.5,
+  num_word_to_digits: 1.2,
+  num_arith: 2.5,
 }
 
 /** Credit needed to leave level N (index = current level 1..4). */
@@ -43,8 +56,8 @@ export const LEVEL_KEYS = ['new', 'seen', 'learning', 'familiar', 'strong', 'mas
 export type Band = 'recognition' | 'recall' | 'production'
 
 export const BAND_TYPES: Record<Band, ExerciseType[]> = {
-  recognition: ['mc_l2_l1', 'match', 'listen_choose'],
-  recall: ['mc_l1_l2', 'fill_blank', 'sentence_build'],
+  recognition: ['mc_l2_l1', 'match', 'listen_choose', 'match_qa'],
+  recall: ['mc_l1_l2', 'fill_blank', 'sentence_build', 'context_choice', 'context_listen'],
   production: ['type_l1_l2', 'listen_type', 'speak'],
 }
 
@@ -239,4 +252,73 @@ export function reviewPriority(p: WordProgress, now: number): number {
   const s = strengthAt(p, now)
   const overdue = isDue(p, now) ? 100 + Math.min((now - p.dueAt) / DAY_MS, 60) : 0
   return overdue + (100 - s)
+}
+
+
+// ---------------------------------------------------------------------------
+// Sub-skills (meaning / gender / plural / forms)
+// ---------------------------------------------------------------------------
+
+type ExtraSkill = Exclude<SubSkill, 'meaning'>
+
+/** Which extra sub-skills a word needs besides its meaning. */
+export function requiredSkills(w: Pick<Word, 'type' | 'gender' | 'plural' | 'pluralOnly' | 'verb'>): ExtraSkill[] {
+  const out: ExtraSkill[] = []
+  if (w.type === 'noun' && w.gender) {
+    if (!w.pluralOnly) out.push('gender')
+    if (w.plural) out.push('plural')
+  }
+  if (w.type === 'verb' && w.verb && (w.verb.present3sg || w.verb.praeteritum || w.verb.perfekt)) out.push('forms')
+  return out
+}
+
+/** A word can only be as strong as its weakest required sub-skill allows: cap = skill level + 2. */
+export const SKILL_CAP_MARGIN = 2
+
+export function skillLevel(p: WordProgress, skill: SubSkill): number {
+  return skill === 'meaning' ? p.level : (p.skills?.[skill]?.level ?? 0)
+}
+
+/** Level shown in the UI and used for exercise bands: meaning level capped by required sub-skills. */
+export function effectiveLevel(p: WordProgress): Level {
+  let lv: number = p.level
+  for (const s of p.required ?? []) lv = Math.min(lv, skillLevel(p, s) + SKILL_CAP_MARGIN)
+  return Math.max(0, lv) as Level
+}
+
+function asWordProgress(base: WordProgress, st: SkillProgress | undefined): WordProgress {
+  const fresh = newProgress(base.profileId, base.wordId)
+  return { ...fresh, ...(st ?? {}), skills: undefined, required: undefined } as WordProgress
+}
+
+/** Apply one answer to a sub-skill (same SRS rules as `applyAnswer`). */
+export function applySkillAnswer(prev: WordProgress, skill: SubSkill, a: AnswerInput): AnswerOutcome {
+  if (skill === 'meaning') {
+    const out = applyAnswer(prev, a)
+    return { ...out, progress: { ...out.progress, skills: prev.skills, required: prev.required } }
+  }
+  const cur = asWordProgress(prev, prev.skills?.[skill])
+  const out = applyAnswer(cur, a)
+  const { skills: _s, required: _r, ...state } = out.progress
+  void _s
+  void _r
+  const progress: WordProgress = { ...prev, skills: { ...(prev.skills ?? {}), [skill]: state } }
+  return { progress, previousLevel: out.previousLevel, leveledUp: out.leveledUp, leveledDown: out.leveledDown }
+}
+
+/** Strength of the word = weakest strength among practised required sub-skills. */
+export function wordStrengthAt(p: WordProgress, now: number): number {
+  let s = strengthAt(p, now)
+  for (const k of p.required ?? []) {
+    const st = p.skills?.[k]
+    if (st && st.level > 0) s = Math.min(s, strengthAt(asWordProgress(p, st), now))
+  }
+  return s
+}
+
+/** Reset the review date of every sub-skill to `now` (failed words in the lesson test come back soon). */
+export function dueNow(p: WordProgress, now: number): WordProgress {
+  const skills: WordProgress['skills'] = {}
+  for (const [k, v] of Object.entries(p.skills ?? {})) skills[k as ExtraSkill] = { ...(v as SkillProgress), dueAt: now }
+  return { ...p, dueAt: now, skills }
 }

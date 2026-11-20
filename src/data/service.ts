@@ -5,8 +5,8 @@ import {
 } from '../core/gamification'
 import { uid } from '../core/id'
 import type { LessonMode, LessonResultItem } from '../core/lesson'
-import { applyAnswer, dayKey } from '../core/srs'
-import type { Level, Profile, SessionLog, Word } from '../core/types'
+import { applySkillAnswer, dayKey, dueNow, effectiveLevel, requiredSkills } from '../core/srs'
+import type { Level, Profile, SessionLog, TestResult, TestWordResult, Word } from '../core/types'
 import { db } from './db'
 import { progressOrNew } from './repo'
 
@@ -54,7 +54,7 @@ export async function computeAchievementStats(profile: Profile): Promise<Achieve
     db.decks.count(),
     db.words.toArray(),
   ])
-  const levelOf = new Map(progress.map((p) => [p.wordId, p.level]))
+  const levelOf = new Map(progress.map((p) => [p.wordId, effectiveLevel(p)]))
   const byUnit = new Map<string, number[]>()
   for (const w of words) {
     const k = `${w.deckId}#${w.unitIndex}`
@@ -67,8 +67,8 @@ export async function computeAchievementStats(profile: Profile): Promise<Achieve
     perfectLessons: sessions.filter((s) => s.perfect).length,
     streak: profile.streak,
     xpTotal: profile.xpTotal,
-    masteredWords: progress.filter((p) => p.level === 5).length,
-    learnedWords: progress.filter((p) => p.level >= 1).length,
+    masteredWords: progress.filter((p) => effectiveLevel(p) === 5).length,
+    learnedWords: progress.filter((p) => effectiveLevel(p) >= 1).length,
     decks,
     goldUnits,
     goalDays,
@@ -89,16 +89,20 @@ export async function finishLesson(input: FinishInput): Promise<FinishOutput> {
     const firstLevel = new Map<string, Level>()
     let xp = 0
     for (const r of input.results) {
-      const prev = progressOrNew(state, input.profileId, r.wordId)
-      if (!firstLevel.has(r.wordId)) firstLevel.set(r.wordId, prev.level)
-      const out = applyAnswer(prev, {
-        correct: r.correct,
-        type: r.type,
-        ...(r.quality ? { quality: r.quality } : {}),
-        now: input.now,
-        sessionId: input.sessionId,
-      })
-      state.set(r.wordId, out.progress)
+      let cur = progressOrNew(state, input.profileId, r.wordId)
+      const word = words.get(r.wordId)
+      if (word) cur = { ...cur, required: requiredSkills(word) }
+      if (!firstLevel.has(r.wordId)) firstLevel.set(r.wordId, effectiveLevel(cur))
+      for (const c of r.credits ?? [{ skill: 'meaning' as const, correct: r.correct }]) {
+        cur = applySkillAnswer(cur, c.skill, {
+          correct: c.correct,
+          type: r.type,
+          ...(r.quality ? { quality: r.quality } : {}),
+          now: input.now,
+          sessionId: input.sessionId,
+        }).progress
+      }
+      state.set(r.wordId, cur)
       xp += xpForAnswer(r.type, r.correct, r.quality)
     }
     const correct = input.results.filter((r) => r.correct).length
@@ -109,7 +113,8 @@ export async function finishLesson(input: FinishInput): Promise<FinishOutput> {
     const levelUps: LevelChange[] = []
     for (const [wordId, p] of state) {
       const from = firstLevel.get(wordId) ?? 0
-      if (p.level > from) levelUps.push({ wordId, term: words.get(wordId)?.term ?? '', from, to: p.level })
+      const to = effectiveLevel(p)
+      if (to > from) levelUps.push({ wordId, term: words.get(wordId)?.term ?? '', from, to })
     }
 
     const today = dayKey(input.now)
@@ -155,3 +160,68 @@ export async function finishLesson(input: FinishInput): Promise<FinishOutput> {
 }
 
 export { ACHIEVEMENTS }
+
+
+// ---------------------------------------------------------------------------
+// "Test lecție"
+// ---------------------------------------------------------------------------
+
+export const VERIFIED_AT = 0.9
+
+export interface FinishTestInput {
+  profileId: string
+  deckId: string
+  words: TestWordResult[]
+  now: number
+}
+
+export function scoreTest(words: readonly TestWordResult[]): { correct: number; total: number; score: number } {
+  let correct = 0
+  let total = 0
+  for (const w of words) {
+    for (const d of [w.deToRo, w.roToDe, w.context]) {
+      if (!d) continue
+      total += 1
+      if (d.ok) correct += 1
+    }
+  }
+  return { correct, total, score: total ? correct / total : 0 }
+}
+
+/** Per-group score (numbers lessons: 0–10, 11–20 …). */
+export function groupScores(words: readonly TestWordResult[]): { group: string; correct: number; total: number }[] {
+  const m = new Map<string, { correct: number; total: number }>()
+  for (const w of words) {
+    if (!w.group) continue
+    const g = m.get(w.group) ?? { correct: 0, total: 0 }
+    for (const d of [w.deToRo, w.roToDe, w.context]) {
+      if (!d) continue
+      g.total += 1
+      if (d.ok) g.correct += 1
+    }
+    m.set(w.group, g)
+  }
+  return [...m.entries()].map(([group, v]) => ({ group, ...v }))
+}
+
+/** Saves the attempt in the lesson's history; failed words come back in the next sessions. */
+export async function finishTest(input: FinishTestInput): Promise<TestResult> {
+  return db.transaction('rw', [db.tests, db.progress], async () => {
+    const { correct, total, score } = scoreTest(input.words)
+    const result: TestResult = {
+      id: uid(), profileId: input.profileId, deckId: input.deckId, ts: input.now, date: dayKey(input.now),
+      score, total, correct, words: input.words, verified: score >= VERIFIED_AT,
+    }
+    await db.tests.add(result)
+    const failed = input.words.filter((w) => [w.deToRo, w.roToDe, w.context].some((d) => d && !d.ok))
+    const rows = (await db.progress.bulkGet(failed.map((w) => [input.profileId, w.wordId] as [string, string]))).filter(
+      (p): p is NonNullable<typeof p> => !!p,
+    )
+    await db.progress.bulkPut(rows.map((p) => dueNow(p, input.now)))
+    return result
+  })
+}
+
+export function isVerified(tests: readonly TestResult[]): boolean {
+  return tests.some((t) => t.verified)
+}

@@ -1,13 +1,13 @@
 /** Repository functions over Dexie. Keep UI free of table details. */
 import { uid } from '../core/id'
-import { parseWordList, type JsonWordInput } from '../core/parser'
+import { parseWordList, rowToInput, type JsonWordInput } from '../core/parser'
 import { newProgress } from '../core/srs'
-import { assignUnits } from '../core/units'
-import type { Deck, Profile, ProfileSettings, Word, WordProgress } from '../core/types'
+import { assignUnitsFor } from '../core/units'
+import type { Cefr, Deck, Profile, ProfileSettings, TestResult, Word, WordProgress } from '../core/types'
 import { db } from './db'
-import { DEMO_DECK_NAME, DEMO_TEXT } from './seed'
+import { COURSE, GERMAN_SEEDS } from './seed'
 
-export const DEFAULT_SETTINGS: ProfileSettings = { ttsVoice: null, ttsRate: 0.9, sound: true, hearts: false, speaking: false }
+export const DEFAULT_SETTINGS: ProfileSettings = { ttsVoice: null, ttsRate: 0.9, sound: true, hearts: false, speaking: false, genderColors: true }
 export const AVATARS = ['🦊', '🐼', '🐯', '🐸', '🦄', '🐙', '🦉', '🐧', '🐝', '🦖']
 
 // ---------- meta ----------
@@ -21,17 +21,44 @@ export async function setMeta(key: string, value: unknown): Promise<void> {
 
 // ---------- decks & words ----------
 
-export async function createDeck(name: string, items: JsonWordInput[], l2 = 'English', l1 = 'Romanian'): Promise<string> {
-  const deck: Deck = { id: uid(), name: name.trim() || 'Pachet nou', createdAt: Date.now(), l2, l1 }
-  const units = assignUnits(items.length)
-  const words: Word[] = items.map((it, i) => {
-    const w: Word = {
-      id: uid(), deckId: deck.id, unitIndex: units[i] ?? 0, order: i,
-      term: it.term.trim(), translations: it.translations, tags: it.tags,
-    }
-    if (it.example) w.example = it.example
-    return w
-  })
+export interface DeckOptions {
+  l2?: string
+  l1?: string
+  course?: string
+  cefr?: Cefr
+  lesson?: number
+}
+
+function toWord(it: JsonWordInput, deckId: string, order: number, unitIndex: number): Word {
+  const w: Word = { id: uid(), deckId, unitIndex, order, term: it.term.trim(), translations: it.translations, tags: it.tags }
+  if (it.example) w.example = it.example
+  if (it.type) w.type = it.type
+  if (it.gender) w.gender = it.gender
+  if (it.plural !== undefined) w.plural = it.plural
+  if (it.pluralOnly) w.pluralOnly = true
+  if (it.verb) w.verb = it.verb
+  if (it.alternatives?.length) w.alternatives = it.alternatives
+  if (it.value !== undefined) w.value = it.value
+  if (it.group) w.group = it.group
+  return w
+}
+
+/** Lesson number from a textbook-style name ("Lektion 5 – Familie" -> 5). */
+export function lessonFromName(name: string): number | undefined {
+  const m = name.match(/(?:lektion|lecția|lectia|lesson|unit)\s*(\d+)/i)
+  return m ? Number(m[1]) : undefined
+}
+
+export async function createDeck(name: string, items: JsonWordInput[], opts: DeckOptions = {}): Promise<string> {
+  const deck: Deck = {
+    id: uid(), name: name.trim() || 'Pachet nou', createdAt: Date.now(), l2: opts.l2 ?? 'German', l1: opts.l1 ?? 'Romanian',
+  }
+  if (opts.course?.trim()) deck.course = opts.course.trim()
+  if (opts.cefr) deck.cefr = opts.cefr
+  const lesson = opts.lesson ?? lessonFromName(deck.name)
+  if (lesson !== undefined) deck.lesson = lesson
+  const units = assignUnitsFor(items)
+  const words = items.map((it, i) => toWord(it, deck.id, i, units[i] ?? 0))
   await db.transaction('rw', db.decks, db.words, async () => {
     await db.decks.add(deck)
     await db.words.bulkAdd(words)
@@ -39,28 +66,34 @@ export async function createDeck(name: string, items: JsonWordInput[], l2 = 'Eng
   return deck.id
 }
 
+export async function updateDeck(id: string, patch: Partial<Pick<Deck, 'name' | 'course' | 'cefr' | 'lesson'>>): Promise<void> {
+  const d = await db.decks.get(id)
+  if (!d) return
+  const next: Deck = { ...d, ...patch }
+  if (!next.course) delete next.course
+  if (!next.cefr) delete next.cefr
+  if (next.lesson === undefined) delete next.lesson
+  await db.decks.put(next)
+}
+
 /** Re-number `order` and `unitIndex` after words were added/removed. */
 export async function reindexDeck(deckId: string): Promise<void> {
   const words = (await db.words.where('deckId').equals(deckId).toArray()).sort((a, b) => a.order - b.order)
-  const units = assignUnits(words.length)
+  const units = assignUnitsFor(words)
   await db.words.bulkPut(words.map((w, i) => ({ ...w, order: i, unitIndex: units[i] ?? 0 })))
 }
 
 export async function addWords(deckId: string, items: JsonWordInput[]): Promise<void> {
   const existing = await db.words.where('deckId').equals(deckId).toArray()
   let order = existing.reduce((m, w) => Math.max(m, w.order), -1) + 1
-  const words: Word[] = items.map((it) => {
-    const w: Word = { id: uid(), deckId, unitIndex: 0, order: order++, term: it.term.trim(), translations: it.translations, tags: it.tags }
-    if (it.example) w.example = it.example
-    return w
-  })
+  const words = items.map((it) => toWord(it, deckId, order++, 0))
   await db.transaction('rw', db.words, async () => {
     await db.words.bulkAdd(words)
     await reindexDeck(deckId)
   })
 }
 
-export async function updateWord(id: string, patch: Partial<Pick<Word, 'term' | 'translations' | 'example' | 'tags'>>): Promise<void> {
+export async function updateWord(id: string, patch: Partial<Pick<Word, 'term' | 'translations' | 'example' | 'tags' | 'type' | 'gender' | 'plural' | 'pluralOnly' | 'verb' | 'alternatives'>>): Promise<void> {
   const w = await db.words.get(id)
   if (!w) return
   const next: Word = { ...w, ...patch }
@@ -151,24 +184,31 @@ export function progressOrNew(map: ReadonlyMap<string, WordProgress>, profileId:
 
 // ---------- first run ----------
 
-/** Creates the first profile and the demo deck on first launch. Idempotent. */
+/**
+ * First run: creates a profile and the German demo lessons. Also adds the German seed lessons to
+ * installs that predate them (once, tracked by meta `seed:de1`), never touching existing data.
+ */
 export async function ensureSeed(): Promise<void> {
-  if (await getMeta<boolean>('seeded')) return
   await db.transaction('rw', db.profiles, db.decks, db.words, db.meta, async () => {
     if ((await db.profiles.count()) === 0) {
       const p = makeProfile('Elev', AVATARS[0] as string)
       await db.profiles.add(p)
       await setMeta('activeProfileId', p.id)
     }
-    if ((await db.decks.count()) === 0) {
-      const parsed = parseWordList(DEMO_TEXT)
-      const items: JsonWordInput[] = parsed.rows.filter((r) => r.valid).map((r) => {
-        const it: JsonWordInput = { term: r.term, translations: r.translations, tags: r.tags }
-        if (r.example) it.example = r.example
-        return it
-      })
-      await createDeck(DEMO_DECK_NAME, items)
+    if (!(await getMeta<boolean>('seed:de1'))) {
+      for (const seed of GERMAN_SEEDS) {
+        const items = parseWordList(seed.text).rows.filter((r) => r.valid).map(rowToInput)
+        await createDeck(seed.name, items, { course: COURSE, cefr: 'A1', lesson: seed.lesson })
+      }
+      await setMeta('seed:de1', true)
     }
     await setMeta('seeded', true)
   })
+}
+
+// ---------- lesson tests ----------
+
+export async function testsFor(profileId: string, deckId: string): Promise<TestResult[]> {
+  const all = await db.tests.where('deckId').equals(deckId).toArray()
+  return all.filter((t) => t.profileId === profileId).sort((a, b) => b.ts - a.ts)
 }

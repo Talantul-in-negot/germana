@@ -51,7 +51,7 @@ export function levenshtein(a: string, b: string): number {
  *  2. equal after stripping diacritics                  -> diacritics (accepted, show correct form)
  *  3. Levenshtein <= 1 on folded text, target > 4 chars -> typo (accepted, flagged)
  */
-export function checkAnswer(input: string, accepted: readonly string[]): CheckResult {
+export function checkAnswer(input: string, accepted: readonly string[], lexicon: readonly string[] = []): CheckResult {
   const list = accepted.filter((a) => a.trim().length > 0)
   const fallback = list[0] ?? ''
   const n = normalize(input)
@@ -60,13 +60,45 @@ export function checkAnswer(input: string, accepted: readonly string[]): CheckRe
 
   for (const a of list) if (normalize(a) === n) return { verdict: 'correct', expected: a }
   for (const a of list) if (fold(a) === f) return { verdict: 'diacritics', expected: a }
+  // never accept a "typo" that is actually another word of the course
+  const other = new Set(lexicon.map((x) => fold(x)))
+  for (const a of list) other.delete(fold(a))
   for (const a of list) {
     const fa = fold(a)
-    if (fa.length > 4 && levenshtein(f, fa) <= 1) return { verdict: 'typo', expected: a }
+    if (fa.length > 4 && levenshtein(f, fa) <= 1 && !other.has(f)) return { verdict: 'typo', expected: a }
   }
   return { verdict: 'wrong', expected: fallback }
 }
 
 export function isAccepted(v: Verdict): boolean {
   return v !== 'wrong'
+}
+
+/**
+ * Accepted Romanian forms: as given, without a leading infinitive "a ", and with the
+ * definite article (masă/masa, câine/câinele, băiat/băiatul, floare/floarea).
+ */
+export function expandRomanian(translations: readonly string[]): string[] {
+  const out = new Set<string>()
+  for (const raw of translations) {
+    const t = raw.trim()
+    if (!t) continue
+    out.add(t)
+    if (/^a\s+\S/i.test(t)) out.add(t.replace(/^a\s+/i, ''))
+    if (t.includes(' ')) continue
+    if (/ă$/i.test(t)) out.add(t.slice(0, -1) + 'a')
+    else if (/a$/i.test(t)) out.add(t + 'ua')
+    else if (/e$/i.test(t)) {
+      out.add(t + 'a')
+      out.add(t + 'le')
+    } else if (/[iu]$/i.test(t)) out.add(t + 'l')
+    else if (/[bcdfghjklmnpqrstvwxzțș]$/i.test(t)) out.add(t + 'ul')
+  }
+  return [...out]
+}
+
+export function checkRomanian(input: string, translations: readonly string[], lexicon: readonly string[] = []): CheckResult {
+  const res = checkAnswer(input, expandRomanian(translations), lexicon)
+  const first = translations[0] ?? ''
+  return res.verdict === 'wrong' ? res : { ...res, expected: translations.find((t) => fold(t) === fold(res.expected)) ?? first }
 }

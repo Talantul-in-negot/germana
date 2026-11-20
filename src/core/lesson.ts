@@ -1,7 +1,7 @@
 /** Lesson planning and runtime (queue with re-queueing of wrong answers). Pure. */
-import { buildExercise, chooseType, type BuildContext, type Exercise } from './exercises'
+import { buildExercise, chooseType, chooseTypeFor, type BuildContext, type Credit, type Exercise, type PlanInfo } from './exercises'
 import { shuffle } from './id'
-import { isDue, reviewPriority, strengthAt } from './srs'
+import { isDue, reviewPriority, wordStrengthAt } from './srs'
 import type { ExerciseType, Quality, Word, WordProgress } from './types'
 
 export type LessonMode = 'unit' | 'weak' | 'review'
@@ -45,7 +45,7 @@ export function selectLessonWords(
   const score = (w: Word): number => {
     const p = progress.get(w.id) as WordProgress
     const boost = cfg.mode === 'unit' && w.unitIndex === cfg.unitIndex ? 20 : 0
-    if (cfg.mode === 'weak') return 100 - strengthAt(p, now) + jitter()
+    if (cfg.mode === 'weak') return 100 - wordStrengthAt(p, now) + jitter()
     return reviewPriority(p, now) + boost + jitter()
   }
   const reviewPool = learned.sort((a, b) => score(b) - score(a))
@@ -73,6 +73,8 @@ export interface LessonResultItem {
   type: ExerciseType
   correct: boolean
   quality?: Quality
+  /** per-sub-skill results (default: meaning = correct) */
+  credits?: Credit[]
 }
 
 export interface LessonRuntime {
@@ -94,6 +96,7 @@ export function planLesson(
   ctxBase: Omit<BuildContext, 'deckWords'>,
   speakEnabled: boolean,
   size: number,
+  infoOf?: (w: Word) => PlanInfo,
 ): LessonRuntime {
   const lastType: Record<string, ExerciseType> = {}
   const queue: Exercise[] = []
@@ -103,7 +106,8 @@ export function planLesson(
   while (queue.length < target && words.length > 0 && guard++ < 4) {
     for (const w of words) {
       if (queue.length >= target) break
-      const type = chooseType(w, levelOf(w.id), { deckSize: deckWords.length, speakEnabled, rng: ctx.rng }, lastType[w.id])
+      const cctx = { deckSize: deckWords.length, speakEnabled, rng: ctx.rng }
+      const type = infoOf ? chooseTypeFor(w, infoOf(w), cctx, lastType[w.id]) : chooseType(w, levelOf(w.id), cctx, lastType[w.id])
       lastType[w.id] = type
       queue.push(buildExercise(w, type, ctx))
     }
@@ -140,8 +144,12 @@ export function submitResult(
   const lastType = { ...rt.lastType, [item.wordId]: item.type }
   if (!item.correct) {
     // retry with a recognition-level exercise so the learner sees the answer again and succeeds
-    const retryType = chooseType(word, 0, { deckSize: ctx.deckWords.length, speakEnabled, rng: ctx.rng }, item.type)
-    const ex = buildExercise(word, retryType === 'match' ? 'mc_l2_l1' : retryType, ctx)
+    // numbers 21–40 (units before tens) are retried as "digits -> type the word"
+    const hardNumber = word.value !== undefined && word.value >= 21 && word.value <= 40
+    const retryType: ExerciseType = hardNumber
+      ? 'num_digits_to_word'
+      : chooseType(word, 0, { deckSize: ctx.deckWords.length, speakEnabled, rng: ctx.rng }, item.type)
+    const ex = buildExercise(word, retryType === 'match' || retryType === 'match_qa' ? 'mc_l2_l1' : retryType, ctx)
     const at = Math.min(queue.length, rt.cursor + 1 + Math.min(3, queue.length - rt.cursor - 1))
     queue.splice(Math.max(at, rt.cursor + 1), 0, ex)
     requeued += 1
