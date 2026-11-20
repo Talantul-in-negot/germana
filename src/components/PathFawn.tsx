@@ -38,10 +38,11 @@ function writeStored(key: string, n: number): void {
 export function PathFawn({ index, count, storageKey }: { index: number; count: number; storageKey: string }) {
   const reduced = useReducedMotion()
   const hidden = useDocumentHidden()
-  const [start] = useState(() => readStored(storageKey, count) ?? index)
+  const instant = reduced || hidden
+  // no walk to render with reduced motion (or a hidden tab): start already on the target
+  const [start] = useState(() => (instant ? index : (readStored(storageKey, count) ?? index)))
   const [walking, setWalking] = useState(false)
   useEffect(() => writeStored(storageKey, index), [storageKey, index])
-  const instant = reduced || hidden
   return (
     <motion.div
       className="pointer-events-none absolute left-1/2 top-0 z-10" data-testid="path-fawn" data-index={index}

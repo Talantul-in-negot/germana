@@ -23,7 +23,7 @@ export default function Profiles() {
 
   return (
     <div className="grid gap-4">
-      <button className="text-left text-sm font-bold text-brand" onClick={() => nav(-1)}>← {t('common.back')}</button>
+      <button className="inline-flex min-h-12 items-center text-left text-sm font-bold text-brand" onClick={() => nav(-1)}>← {t('common.back')}</button>
       <h1 className="text-2xl font-black">{t('profiles.title')}</h1>
       <ul className="grid gap-2">
         {profiles.map((p) => (
@@ -38,7 +38,7 @@ export default function Profiles() {
             ) : (
               <button className="btn btn-ghost !px-3 !py-1.5 !text-sm" onClick={() => void switchTo(p.id)}>{t('profiles.switch')}</button>
             )}
-            <button aria-label={t('common.delete')} className="text-xl" onClick={() => (profiles.length > 1 ? setDel(p) : setMsg(t('profiles.last')))}>🗑️</button>
+            <button aria-label={t('common.delete')} className="flex h-12 w-12 items-center justify-center text-xl" onClick={() => (profiles.length > 1 ? setDel(p) : setMsg(t('profiles.last')))}>🗑️</button>
           </li>
         ))}
       </ul>

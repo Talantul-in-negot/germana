@@ -62,10 +62,10 @@ export function KeyBar({ inputRef, value, onChange, disabled }: {
     })
   }
   return (
-    <div className="mb-2 flex flex-wrap gap-1.5" role="group" aria-label={t('ex.keybar')}>
+    <div className="mb-2 grid grid-cols-4 gap-1.5 min-[420px]:grid-cols-7" role="group" aria-label={t('ex.keybar')}>
       {KEYS.map((k) => (
         <button key={k} type="button" disabled={disabled} onMouseDown={(e) => e.preventDefault()} onClick={() => insert(k)}
-          className="h-10 min-w-10 rounded-xl border-b-4 border-slate-300 bg-white px-2 text-lg font-black active:translate-y-0.5" data-testid={`key-${k}`}>
+          className="h-12 min-w-12 rounded-2xl border-b-4 border-slate-300 bg-white px-2 text-lg font-black active:translate-y-0.5" data-testid={`key-${k}`}>
           {k}
         </button>
       ))}

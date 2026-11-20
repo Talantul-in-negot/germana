@@ -51,7 +51,7 @@ export default function DeckDetail() {
   const units = [...new Set(words.map((w) => w.unitIndex))]
   return (
     <div>
-      <button className="mb-2 text-sm font-bold text-brand" onClick={() => nav('/decks')}>← {t('common.back')}</button>
+      <button className="mb-2 inline-flex min-h-12 items-center text-sm font-bold text-brand" onClick={() => nav('/decks')}>← {t('common.back')}</button>
       <div className="mb-4 flex items-center justify-between gap-2">
         {renaming ? (
           <input className="input !py-2" value={name} autoFocus onChange={(e) => setName(e.target.value)}

@@ -71,7 +71,7 @@ export default function Settings() {
       <section className="card">
         <div className="flex items-center justify-between">
           <p className="font-black">{profile.avatar} {profile.name}</p>
-          <Link to="/profiles" className="text-sm font-bold text-brand underline">{t('profiles.title')}</Link>
+          <Link to="/profiles" className="inline-flex min-h-12 items-center text-sm font-bold text-brand underline">{t('profiles.title')}</Link>
         </div>
         <p className="mt-3 font-extrabold">{t('settings.goal')}</p>
         <div className="mt-2 flex gap-2" role="radiogroup">
@@ -103,7 +103,7 @@ export default function Settings() {
               </select>
             </label>
             <label className="text-sm font-bold">{t('settings.speed')}: {s.ttsRate.toFixed(1)}×
-              <input type="range" min={0.5} max={1.5} step={0.1} value={s.ttsRate} className="mt-1 w-full" onChange={(e) => set({ ttsRate: Number(e.target.value) })} />
+              <input type="range" min={0.5} max={1.5} step={0.1} value={s.ttsRate} className="mt-1 h-12 w-full" onChange={(e) => set({ ttsRate: Number(e.target.value) })} />
             </label>
             <button className="btn btn-ghost" onClick={() => speak('Guten Tag! Wie geht es dir?', { voice: s.ttsVoice, rate: s.ttsRate, lang: 'de-DE' })}>🔊 {t('settings.test')}</button>
           </div>

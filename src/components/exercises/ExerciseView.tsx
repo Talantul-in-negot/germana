@@ -300,7 +300,7 @@ export function ArticleView({ ex, locked, outcome, onSubmit, say }: ExerciseProp
         })}
       </div>
       {locked && (
-        <button type="button" className="mt-4 text-sm font-bold text-brand underline" onClick={() => say(ex.speak)}>🔊 {ex.speak}</button>
+        <button type="button" className="mt-4 min-h-12 text-sm font-bold text-brand underline" onClick={() => say(ex.speak)}>🔊 {ex.speak}</button>
       )}
     </div>
   )

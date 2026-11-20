@@ -144,7 +144,7 @@ export default function Conj() {
   const tier = verbCrown(strengths)
   return (
     <div className="panel screen-panel overflow-y-auto !p-5 pb-12" data-testid="conj-menu">
-      <button className="mb-2 text-sm font-bold text-brand" onClick={() => nav(-1)}>← {t('common.back')}</button>
+      <button className="mb-2 inline-flex min-h-12 items-center text-sm font-bold text-brand" onClick={() => nav(-1)}>← {t('common.back')}</button>
       <div className="mb-1 flex items-center justify-between">
         <h1 className="text-2xl font-black">{t('conj.title')} · {verb.term}</h1>
         <Crowns tier={tier} size={22} />

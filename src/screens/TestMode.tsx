@@ -233,7 +233,7 @@ export default function TestMode() {
   if (phase === 'intro' || phase === 'result') {
     return (
       <div className="panel screen-panel overflow-y-auto !p-5 pb-12">
-        <button className="mb-2 text-sm font-bold text-brand" onClick={() => nav('/decks')}>← {t('common.back')}</button>
+        <button className="mb-2 inline-flex min-h-12 items-center text-sm font-bold text-brand" onClick={() => nav('/decks')}>← {t('common.back')}</button>
         <h1 className="text-2xl font-black">{t('test.title')}</h1>
         <p className="mb-4 text-slate-600">{deckName}</p>
         {words.length === 0 ? (

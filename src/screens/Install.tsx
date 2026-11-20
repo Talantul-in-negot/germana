@@ -17,7 +17,7 @@ export default function Install() {
   const state = persisted === null ? 'install.persist.unknown' : persisted ? 'install.persist.yes' : 'install.persist.no'
   return (
     <div className="grid gap-4" data-testid="install-screen">
-      <button className="text-left text-sm font-bold text-brand" onClick={() => nav('/settings')}>← {t('install.back')}</button>
+      <button className="inline-flex min-h-12 items-center text-left text-sm font-bold text-brand" onClick={() => nav('/settings')}>← {t('install.back')}</button>
       <div className="flex items-center gap-3">
         <Mascot size={64} />
         <h1 className="text-2xl font-black">{t('install.title')}</h1>
