@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #7c3aed;
+  --color-brand-dark: #5b21b6;
+  --color-brand-soft: #ede9fe;
+  --color-accent: #f59e0b;
+  --color-ink: #1f1235;
+  --color-paper: #faf7ff;
+  --color-good: #16a34a;
+  --color-good-soft: #dcfce7;
+  --color-bad: #dc2626;
+  --color-bad-soft: #fee2e2;
+  --font-sans: ui-rounded, "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 font-extrabold text-base
+      border-b-4 transition active:translate-y-0.5 active:border-b-2 disabled:opacity-40 disabled:pointer-events-none select-none;
+  }
+  .btn-primary { @apply bg-brand text-white border-brand-dark hover:brightness-110; }
+  .btn-good { @apply bg-good text-white border-green-800 hover:brightness-110; }
+  .btn-bad { @apply bg-bad text-white border-red-800 hover:brightness-110; }
+  .btn-ghost { @apply bg-white text-ink border-slate-300 border-2 border-b-4 hover:bg-slate-50; }
+  .card { @apply rounded-3xl bg-white p-4 shadow-sm border-2 border-slate-100; }
+  .input {
+    @apply w-full rounded-2xl border-2 border-slate-200 bg-white px-4 py-3 text-lg outline-none focus:border-brand;
+  }
+  .choice {
+    @apply w-full rounded-2xl border-2 border-b-4 border-slate-300 bg-white px-4 py-3.5 text-left text-lg font-bold
+      transition active:translate-y-0.5 disabled:pointer-events-none;
+  }
+  .choice[data-selected="true"] { @apply border-brand bg-brand-soft text-brand-dark; }
+  .choice[data-state="right"] { @apply border-good bg-good-soft text-green-900; }
+  .choice[data-state="wrong"] { @apply border-bad bg-bad-soft text-red-900; }
+}

@@ -1,0 +1,223 @@
+import { AnimatePresence, motion } from 'framer-motion'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import type { Outcome } from '../core/exercises'
+import { uid } from '../core/id'
+import {
+  DEFAULT_LESSON, current, isFinished, planLesson, progressRatio, selectLessonWords, submitResult,
+  type LessonMode, type LessonRuntime, type LessonResultItem,
+} from '../core/lesson'
+import { refillHearts } from '../core/gamification'
+import { ExerciseView } from '../components/exercises/ExerciseView'
+import { Confirm, Mascot } from '../components/ui'
+import { useProfile } from '../data/profile-context'
+import { db } from '../data/db'
+import { progressMap, updateProfile } from '../data/repo'
+import { finishLesson, type FinishOutput } from '../data/service'
+import type { Word } from '../core/types'
+import { t } from '../i18n'
+import { playSfx } from '../lib/sound'
+import { speak, sttSupported } from '../lib/speech'
+import Summary from './Summary'
+
+type Phase = 'loading' | 'empty' | 'noHearts' | 'answering' | 'feedback' | 'saving' | 'summary'
+
+export default function Lesson() {
+  const { deckId = '' } = useParams()
+  const [params] = useSearchParams()
+  const mode = (params.get('mode') ?? 'unit') as LessonMode
+  const unit = Number(params.get('unit') ?? 0)
+  const nav = useNavigate()
+  const { profile } = useProfile()
+  const s = profile.settings
+
+  const [phase, setPhase] = useState<Phase>('loading')
+  const [rt, setRt] = useState<LessonRuntime | null>(null)
+  const [outcome, setOutcome] = useState<Outcome | null>(null)
+  const [canCheck, setCanCheck] = useState(false)
+  const [hearts, setHearts] = useState(5)
+  const [exit, setExit] = useState(false)
+  const [result, setResult] = useState<FinishOutput | null>(null)
+  const [levelUps, setLevelUps] = useState<FinishOutput['levelUps']>([])
+
+  const checkRef = useRef<(() => Outcome) | null>(null)
+  const words = useRef<Word[]>([])
+  const sessionId = useRef(uid())
+  const startedAt = useRef(Date.now())
+  const heartsLost = useRef(0)
+  const ctxRef = useRef({ rng: Math.random, newId: uid })
+  const started = useRef(false)
+
+  const heartsOn = s.hearts && mode !== 'review'
+  const speakOn = s.speaking && sttSupported()
+
+  const say = useCallback((text: string) => speak(text, { voice: s.ttsVoice, rate: s.ttsRate }), [s.ttsVoice, s.ttsRate])
+
+  useEffect(() => {
+    if (started.current) return
+    started.current = true
+    void (async () => {
+      const all = (await db.words.where('deckId').equals(deckId).toArray()).sort((a, b) => a.order - b.order)
+      words.current = all
+      const prog = await progressMap(profile.id)
+      const now = Date.now()
+      const h = refillHearts(profile.hearts, profile.heartsAt, now)
+      if (h.hearts !== profile.hearts) await updateProfile(profile.id, { hearts: h.hearts, heartsAt: h.heartsAt })
+      setHearts(h.hearts)
+      if (s.hearts && mode !== 'review' && h.hearts === 0) return setPhase('noHearts')
+      const sel = selectLessonWords(all, prog, now, { mode, size: DEFAULT_LESSON.size, newRatio: DEFAULT_LESSON.newRatio, unitIndex: unit }, Math.random)
+      const picked = sel.wordIds.map((id) => all.find((w) => w.id === id)).filter((w): w is Word => !!w)
+      if (picked.length === 0) return setPhase('empty')
+      const plan = planLesson(picked, (id) => prog.get(id)?.level ?? 0, all, { ...ctxRef.current }, speakOn, DEFAULT_LESSON.size)
+      setRt(plan)
+      startedAt.current = now
+      setPhase('answering')
+    })()
+  }, [deckId, mode, unit, profile, s.hearts, speakOn])
+
+  const onReady = useCallback((fn: (() => Outcome) | null) => {
+    checkRef.current = fn
+    setCanCheck(fn !== null)
+  }, [])
+
+  const commit = useCallback(
+    (o: Outcome) => {
+      setOutcome(o)
+      setPhase('feedback')
+      playSfx(o.correct ? 'correct' : 'wrong', s.sound)
+      if (!o.correct && heartsOn) {
+        heartsLost.current += 1
+        setHearts((h) => Math.max(0, h - 1))
+      }
+    },
+    [s.sound, heartsOn],
+  )
+
+  const check = useCallback(() => {
+    const fn = checkRef.current
+    if (fn) commit(fn())
+  }, [commit])
+
+  const finish = useCallback(
+    async (final: LessonRuntime, lost: number) => {
+      setPhase('saving')
+      const out = await finishLesson({
+        profileId: profile.id, deckId, sessionId: sessionId.current, results: final.results, startedAt: startedAt.current,
+        now: Date.now(), mode, heartsLost: lost,
+      })
+      setResult(out)
+      setLevelUps(out.levelUps)
+      setPhase('summary')
+      playSfx(out.unlocked.length ? 'achievement' : 'finish', s.sound)
+    },
+    [profile.id, deckId, mode, s.sound],
+  )
+
+  const next = useCallback(() => {
+    if (!rt || !outcome) return
+    const ex = current(rt)
+    if (!ex) return
+    const word = words.current.find((w) => w.id === ex.wordId) as Word
+    const item: LessonResultItem = { wordId: ex.wordId, type: ex.type, correct: outcome.correct, ...(outcome.quality ? { quality: outcome.quality } : {}) }
+    const nextRt = submitResult(rt, item, word, { deckWords: words.current, ...ctxRef.current }, speakOn)
+    setRt(nextRt)
+    setOutcome(null)
+    checkRef.current = null
+    setCanCheck(false)
+    const outOfHearts = heartsOn && hearts <= 0
+    if (isFinished(nextRt) || outOfHearts) void finish(nextRt, heartsLost.current)
+    else setPhase('answering')
+  }, [rt, outcome, speakOn, heartsOn, hearts, finish])
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.repeat) return
+      if (phase === 'feedback') next()
+      else if (phase === 'answering' && checkRef.current) check()
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [phase, next, check])
+
+  if (phase === 'loading' || phase === 'saving') {
+    return <div className="flex h-full items-center justify-center text-lg font-bold">{t('app.loading')}</div>
+  }
+  if (phase === 'empty' || phase === 'noHearts') {
+    return (
+      <div className="mx-auto flex h-full max-w-lg flex-col items-center justify-center gap-4 p-6 text-center">
+        <Mascot size={110} mood="sad" />
+        <p className="text-xl font-black">{phase === 'empty' ? t('lesson.nothing') : t('lesson.noHeartsTitle')}</p>
+        {phase === 'noHearts' && <p>{t('home.noHearts')}</p>}
+        <div className="flex w-full gap-3">
+          <button className="btn btn-ghost flex-1" onClick={() => nav('/')}>{t('common.back')}</button>
+          {phase === 'noHearts' && (
+            <button className="btn btn-primary flex-1" onClick={() => nav(`/lesson/${deckId}?mode=review`, { replace: true })}>{t('home.review')}</button>
+          )}
+        </div>
+      </div>
+    )
+  }
+  if (phase === 'summary' && result) {
+    return (
+      <Summary
+        result={result} levelUps={levelUps} mode={mode}
+        onHome={() => nav('/')}
+        onAgain={() => nav(`/lesson/${deckId}?mode=${mode}&unit=${unit}&r=${Date.now()}`, { replace: true })}
+      />
+    )
+  }
+
+  const ex = rt ? current(rt) : undefined
+  if (!rt || !ex) return null
+  const feedback = phase === 'feedback' && outcome
+  const word = words.current.find((w) => w.id === ex.wordId)
+
+  return (
+    <div className="mx-auto flex h-full max-w-lg flex-col">
+      <header className="flex items-center gap-3 px-4 pt-4">
+        <button aria-label={t('lesson.exit')} className="text-2xl font-black text-slate-400" onClick={() => setExit(true)}>✕</button>
+        <div className="h-4 flex-1 overflow-hidden rounded-full bg-slate-200" role="progressbar">
+          <motion.div className="h-full rounded-full bg-good" animate={{ width: `${Math.max(4, progressRatio(rt) * 100)}%` }} />
+        </div>
+        {heartsOn && <span className="font-black text-bad">❤ {hearts}</span>}
+      </header>
+
+      <main className="flex-1 overflow-y-auto px-4 pb-44 pt-6">
+        <AnimatePresence mode="wait">
+          <motion.div key={ex.id} initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -40 }} transition={{ duration: 0.18 }}>
+            <ExerciseView ex={ex} locked={phase === 'feedback'} outcome={outcome} onReady={onReady} onSubmit={commit} say={say} />
+          </motion.div>
+        </AnimatePresence>
+      </main>
+
+      <footer className={`fixed inset-x-0 bottom-0 z-30 border-t-2 ${feedback ? (outcome.correct ? 'border-green-200 bg-good-soft' : 'border-red-200 bg-bad-soft') : 'border-slate-100 bg-paper'}`}>
+        <div className="mx-auto max-w-lg px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-4">
+          {feedback ? (
+            <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} data-testid="feedback">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <p className={`text-xl font-black ${outcome.correct ? 'text-green-800' : 'text-red-800'}`}>{outcome.correct ? t('lesson.correct') : t('lesson.wrong')}</p>
+                  {outcome.note === 'diacritics' && <p className="font-bold text-green-900">{t('lesson.diacritics', { a: outcome.expected })}</p>}
+                  {outcome.note === 'typo' && <p className="font-bold text-green-900">{t('lesson.typo', { a: outcome.expected })}</p>}
+                  {!outcome.correct && (
+                    <p className="font-bold text-red-900">
+                      {t('lesson.answer')} <span data-testid="correct-answer">{outcome.expected}</span>
+                    </p>
+                  )}
+                </div>
+                {word && (
+                  <button aria-label={t('lesson.replay')} className="rounded-xl bg-white/70 px-3 py-2 text-2xl" onClick={() => say(word.term)}>🔊</button>
+                )}
+              </div>
+              <button className={`btn w-full ${outcome.correct ? 'btn-good' : 'btn-bad'}`} onClick={next} autoFocus data-testid="continue">{t('lesson.continue')}</button>
+            </motion.div>
+          ) : (
+            <button className="btn btn-primary w-full" disabled={!canCheck} onClick={check} data-testid="check">{t('lesson.check')}</button>
+          )}
+        </div>
+      </footer>
+
+      <Confirm open={exit} text={t('lesson.exitConfirm')} onYes={() => nav('/')} onNo={() => setExit(false)} />
+    </div>
+  )
+}
