@@ -353,7 +353,7 @@ describe('Dexie v2 -> v3 migration keeps progress', () => {
     old.close()
     const again = new LexiDB(name)
     await again.open()
-    expect(again.verno).toBe(5)
+    expect(again.verno).toBe(6)
     const row = (await again.progress.get(['p', 'w']))!
     expect(row.level).toBe(4)
     expect(row.interval).toBe(9)

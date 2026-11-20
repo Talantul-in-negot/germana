@@ -78,3 +78,4 @@ Choices made without asking (the brief said: pick the simplest reasonable option
     walks from the old node to the new one (600 ms). Reduced motion / hidden tab = instant jump. Home shows one fawn (on the path), the zone resident stands beside the path.
 37. **Reactions**: correct = `happy` 1.2 s, wrong = `encourage` + "Încearcă din nou!" in the feedback; Test lecție never reacts. `MotionConfig reducedMotion="user"` disables transform animations globally.
 38. **Dev route** `/dev/scenes` is registered only when `import.meta.env.DEV` (lazy chunk, absent from the production bundle). All art is inline SVG inside the main JS chunk, so the service worker precaches it already.
+39. **Zahlen is "Lektion 1 – Zahlen 0–40"** (lesson 1, first on the path; zone order follows the lesson order: Zahlen = meadow, W-Fragen = forest, …). Dexie v6 renames the old deck; the temporary sort hack for lesson 0 was removed.

@@ -13,7 +13,7 @@ Wann? ; Când? ; ; ;
 Warum? ; De ce? ; ; ;
 Wie viel?|Wieviel? ; Cât?|Câți?|Câte? ; ; ;`
 
-export const ZAHLEN_DECK_NAME = 'Zahlen 0–40'
+export const ZAHLEN_DECK_NAME = 'Lektion 1 – Zahlen 0–40'
 
 const RO_UNITS = ['zero', 'unu', 'doi', 'trei', 'patru', 'cinci', 'șase', 'șapte', 'opt', 'nouă', 'zece', 'unsprezece', 'doisprezece', 'treisprezece', 'paisprezece', 'cincisprezece', 'șaisprezece', 'șaptesprezece', 'optsprezece', 'nouăsprezece']
 const RO_TENS = ['', '', 'douăzeci', 'treizeci', 'patruzeci']
@@ -99,5 +99,5 @@ export const GERMAN_SEEDS: SeedLesson[] = [
   { key: 'monate', name: MONATE_DECK_NAME, text: MONATE_TEXT, lesson: 4 },
   { key: 'familie2', name: FAMILIE_DECK_NAME, text: FAMILIE_TEXT, lesson: 5 },
   { key: 'verben', name: VERBEN_DECK_NAME, text: VERBEN_TEXT, lesson: 6 },
-  { key: 'zahlen', name: ZAHLEN_DECK_NAME, text: ZAHLEN_TEXT, lesson: 0 },
+  { key: 'zahlen', name: ZAHLEN_DECK_NAME, text: ZAHLEN_TEXT, lesson: 1 },
 ]

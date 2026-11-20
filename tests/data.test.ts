@@ -25,7 +25,7 @@ describe('repo', () => {
     expect(words).toHaveLength(7 + 8 + 12 + 16 + 10 + 41)
     expect(words.every((w) => !w.example)).toBe(true)
     expect(decks.some((d) => d.name.includes('Erste'))).toBe(false)
-    const zahlen = decks.find((d) => d.name.startsWith('Zahlen'))!
+    const zahlen = decks.find((d) => d.name.includes('Zahlen'))!
     expect(new Set(words.filter((w) => w.deckId === zahlen.id).map((w) => w.unitIndex)).size).toBe(4)
     const familie = decks.find((d) => d.name.includes('Familie'))!
     expect(new Set(words.filter((w) => w.deckId === familie.id).map((w) => w.unitIndex)).size).toBe(2)
@@ -180,6 +180,32 @@ describe('v5: stage locks are gone', () => {
     const row = (await now.progress.get(['p', 'w'])) as unknown as Record<string, unknown>
     expect(row.level).toBe(3)
     expect('conj' in row).toBe(false)
+    now.close()
+  })
+})
+
+describe('v6: numbers lesson is Lektion 1', () => {
+  it('renames the old unnumbered Zahlen deck and keeps its words', async () => {
+    const { default: Dexie } = await import('dexie')
+    const { LexiDB } = await import('../src/data/db')
+    const name = 'mig-v6'
+    const v5 = new Dexie(name)
+    v5.version(5).stores({
+      decks: 'id', words: 'id, deckId, [deckId+unitIndex]', profiles: 'id', progress: '[profileId+wordId], profileId, wordId',
+      sessions: 'id, profileId, date', achievements: 'id, profileId, &[profileId+key]', meta: 'key', tests: 'id, profileId, deckId',
+    })
+    await v5.open()
+    await v5.table('decks').bulkAdd([
+      { id: 'z', name: 'Zahlen 0–40', createdAt: 1, l2: 'German', l1: 'Romanian', lesson: 0 },
+      { id: 'o', name: 'Mein Heft', createdAt: 1, l2: 'German', l1: 'Romanian' },
+    ])
+    await v5.table('words').add({ id: 'w', deckId: 'z', unitIndex: 0, order: 0, term: 'null', translations: ['zero'], tags: [] })
+    v5.close()
+    const now = new LexiDB(name)
+    await now.open()
+    expect(await now.decks.get('z')).toMatchObject({ name: 'Lektion 1 – Zahlen 0–40', lesson: 1 })
+    expect((await now.decks.get('o'))?.name).toBe('Mein Heft')
+    expect(await now.words.count()).toBe(1)
     now.close()
   })
 })

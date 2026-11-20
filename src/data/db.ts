@@ -77,6 +77,17 @@ export class LexiDB extends Dexie {
           delete p.conj
         })
       })
+    // v6: the numbers lesson is "Lektion 1" (it used to be an unnumbered lesson 0).
+    this.version(6)
+      .stores({})
+      .upgrade(async (tx) => {
+        await tx.table('decks').toCollection().modify((d: Deck) => {
+          if (d.name === 'Zahlen 0–40') {
+            d.name = 'Lektion 1 – Zahlen 0–40'
+            d.lesson = 1
+          }
+        })
+      })
   }
 }
 
@@ -89,6 +100,7 @@ const SEED_KEEP_TAG: Record<string, string | null> = {
   'Lektion 5 – Familie': null,
   'Lektion 6 – Verben (Präsens)': null,
   'Zahlen 0–40': null,
+  'Lektion 1 – Zahlen 0–40': null,
 }
 
 /** Shared by the v4 upgrade (and its test). */
