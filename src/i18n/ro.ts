@@ -103,11 +103,11 @@ export const ro = {
   'lesson.noHeartsText': 'Ai rămas fără inimi. Progresul de până acum se salvează.',
 
   'ex.mc_l2_l1': 'Ce înseamnă?',
-  'ex.mc_l1_l2': 'Cum se spune în engleză?',
+  'ex.mc_l1_l2': 'Cum se spune în germană?',
   'ex.match': 'Potrivește perechile',
   'ex.listen_choose': 'Ce auzi?',
   'ex.listen_type': 'Scrie ce auzi',
-  'ex.type_l1_l2': 'Scrie în engleză',
+  'ex.type_l1_l2': 'Scrie în germană',
   'ex.fill_blank': 'Completează propoziția',
   'ex.sentence_build': 'Construiește propoziția',
   'ex.speak': 'Spune cu voce tare',
